@@ -11,6 +11,12 @@ describe("workflow tools", () => {
       receiptId: "non-existent-receipt",
       category: "Unknown",
       gifiCode: null,
+      commercialUsePercentage: 100,
+      grossTax: 0,
+      eligibilityPercentage: 0,
+      eligibleItc: 0,
+      itcStatus: "REVIEW",
+      classificationStatus: "REVIEW_REQUIRED",
       confidence: 0,
       reason: "Classification could not be determined.",
     });
@@ -22,9 +28,10 @@ describe("workflow tools", () => {
   it("returns failure for a missing receipt when requesting review", async () => {
     const result = await requestHumanReview({
       receiptId: "non-existent-receipt",
-      proposedCategory: "Office Expenses",
-      proposedGifiCode: "8810",
-      proposedItc: 10,
+      agentRunId: "test-agent-run",
+      proposedCategory: "Unknown",
+      proposedGifiCode: "9999",
+      proposedItc: 0,
       reason: "Manual verification required.",
     });
 

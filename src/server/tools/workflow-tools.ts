@@ -22,9 +22,6 @@ export async function updateExpenseClassification(
     where: {
       id: parsed.receiptId,
     },
-    include: {
-      expense: true,
-    },
   });
 
   if (!receipt) {
@@ -38,13 +35,6 @@ export async function updateExpenseClassification(
     });
   }
 
-  /*
-   * Classification mutation is persisted in the Expense record.
-   * This tool does not silently approve an unresolved classification.
-   */
-  const classificationStatus =
-    parsed.gifiCode === null ? "REVIEW_REQUIRED" : "CLASSIFIED";
-
   const expense = await db.expense.upsert({
     where: {
       receiptId: parsed.receiptId,
@@ -53,22 +43,32 @@ export async function updateExpenseClassification(
       receiptId: parsed.receiptId,
       category: parsed.category,
       gifiCode: parsed.gifiCode,
+      commercialUsePercentage: parsed.commercialUsePercentage,
+      grossTax: parsed.grossTax,
+      eligibilityPercentage: parsed.eligibilityPercentage,
+      eligibleItc: parsed.eligibleItc,
+      itcStatus: parsed.itcStatus,
+      classificationStatus: parsed.classificationStatus,
       confidence: parsed.confidence,
-      classificationStatus,
       reason: parsed.reason,
     },
     update: {
       category: parsed.category,
       gifiCode: parsed.gifiCode,
+      commercialUsePercentage: parsed.commercialUsePercentage,
+      grossTax: parsed.grossTax,
+      eligibilityPercentage: parsed.eligibilityPercentage,
+      eligibleItc: parsed.eligibleItc,
+      itcStatus: parsed.itcStatus,
+      classificationStatus: parsed.classificationStatus,
       confidence: parsed.confidence,
-      classificationStatus,
       reason: parsed.reason,
     },
   });
 
   return UpdateExpenseClassificationResultSchema.parse({
     status:
-      classificationStatus === "REVIEW_REQUIRED"
+      parsed.classificationStatus === "REVIEW_REQUIRED"
         ? "REVIEW_REQUIRED"
         : "SUCCESS",
     receiptId: parsed.receiptId,
@@ -110,25 +110,19 @@ export async function requestHumanReview(
     },
   });
 
-  if (existingApproval) {
-    return RequestHumanReviewResultSchema.parse({
-      status: "SUCCESS",
-      receiptId: parsed.receiptId,
-      approvalId: existingApproval.id,
-      message: "A human review request is already pending.",
-    });
-  }
-
-  const approval = await db.approval.create({
-    data: {
-      receiptId: parsed.receiptId,
-      status: "PENDING",
-      proposedCategory: parsed.proposedCategory,
-      proposedGifiCode: parsed.proposedGifiCode,
-      proposedItc: parsed.proposedItc,
-      reason: parsed.reason,
-    },
-  });
+  const approval =
+    existingApproval ??
+    (await db.approval.create({
+      data: {
+        receiptId: parsed.receiptId,
+        agentRunId: parsed.agentRunId,
+        status: "PENDING",
+        proposedCategory: parsed.proposedCategory,
+        proposedGifiCode: parsed.proposedGifiCode,
+        proposedItc: parsed.proposedItc,
+        reason: parsed.reason,
+      },
+    }));
 
   await db.receipt.update({
     where: {
@@ -143,7 +137,9 @@ export async function requestHumanReview(
     status: "SUCCESS",
     receiptId: parsed.receiptId,
     approvalId: approval.id,
-    message: "Human review request created successfully.",
+    message: existingApproval
+      ? "Receipt is already awaiting human review."
+      : "Human review requested successfully.",
   });
 }
 

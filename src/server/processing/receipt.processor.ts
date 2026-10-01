@@ -1,9 +1,11 @@
 import { prisma } from "@/server/db";
 import { executeTool } from "@/server/tools/executor";
+import { getMealITCPercentage } from "../domain/cra/meals-rules";
 import {
-  getMealITCPercentage,
-  type MealITCException,
-} from "../domain/cra/meals-rules";
+  createAgentRun,
+  completeAgentRun,
+  failAgentRun,
+} from "@/server/agent/agent-run";
 
 const RULE_VERSION = "CRA-PROTOTYPE-v1";
 const MODEL = "cpa-copilot-v1";
@@ -119,15 +121,15 @@ export async function processReceipt(receiptId: string) {
       };
     }
 
-    const agentRun = await tx.agentRun.create({
-      data: {
+    const agentRun = await createAgentRun(
+      {
         receiptId: receipt.id,
         requestId: crypto.randomUUID(),
         provider: "internal",
         model: MODEL,
-        status: "RUNNING",
       },
-    });
+      tx,
+    );
 
     try {
       await tx.auditEvent.create({
@@ -334,6 +336,7 @@ export async function processReceipt(receiptId: string) {
         gifi === null;
 
       let itc;
+      let itcTool: Awaited<ReturnType<typeof executeTool>> | null = null;
 
       if (classificationRequiresReview) {
         itc = {
@@ -349,7 +352,7 @@ export async function processReceipt(receiptId: string) {
           source: "CRA_RULE_ENGINE" as const,
         };
       } else {
-        const itcTool = await executeTool(
+        itcTool = await executeTool(
           "calculate_eligible_itc",
           {
             receiptId: receipt.id,
@@ -428,13 +431,23 @@ export async function processReceipt(receiptId: string) {
         : "CLASSIFIED";
 
       /*
-       * STEP 10: Persist Expense
+       * STEP 10: Persist Expense Classification
+       *
+       * All expense financial state is persisted through
+       * the explicit workflow tool.
        */
-      await tx.expense.upsert({
-        where: {
-          receiptId: receipt.id,
-        },
-        create: {
+      const expenseItcStatus =
+        itc.status === "eligible"
+          ? "ELIGIBLE"
+          : itc.status === "partial"
+            ? "PARTIAL"
+            : itc.status === "ineligible"
+              ? "INELIGIBLE"
+              : "REVIEW";
+
+      const updateClassificationTool = await executeTool(
+        "update_expense_classification",
+        {
           receiptId: receipt.id,
           category: classification.category,
           gifiCode: gifi?.code ?? null,
@@ -442,48 +455,36 @@ export async function processReceipt(receiptId: string) {
           grossTax: Number(receipt.taxAmount),
           eligibilityPercentage,
           eligibleItc: itc.eligibleITC,
-          itcStatus:
-            itc.status === "eligible"
-              ? "ELIGIBLE"
-              : itc.status === "partial"
-                ? "PARTIAL"
-                : itc.status === "ineligible"
-                  ? "INELIGIBLE"
-                  : "REVIEW",
+          itcStatus: expenseItcStatus,
           classificationStatus,
           confidence: classification.confidence,
           reason: `${classification.reason} ${documentation.reason}`,
         },
-        update: {
-          category: classification.category,
-          gifiCode: gifi?.code ?? null,
-          commercialUsePercentage: commercialUsePercentage * 100,
-          grossTax: Number(receipt.taxAmount),
-          eligibilityPercentage,
-          eligibleItc: itc.eligibleITC,
-          itcStatus:
-            itc.status === "eligible"
-              ? "ELIGIBLE"
-              : itc.status === "partial"
-                ? "PARTIAL"
-                : itc.status === "ineligible"
-                  ? "INELIGIBLE"
-                  : "REVIEW",
-          classificationStatus,
-          confidence: classification.confidence,
-          reason: `${classification.reason} ${documentation.reason}`,
+        {
+          selectedReceiptId: receipt.id,
+          agentRunId: agentRun.id,
+          db: tx,
         },
-      });
+      );
+
+      if (
+        updateClassificationTool.status === "FAILURE" ||
+        !updateClassificationTool.output
+      ) {
+        throw new Error("Expense classification update tool failed.");
+      }
 
       /*
-       * STEP 11: Create approval task when human review is required
+       * STEP 11: Request human review when required
        */
+      let humanReviewTool = null;
+
       if (requiresReview) {
-        await tx.approval.create({
-          data: {
+        humanReviewTool = await executeTool(
+          "request_human_review",
+          {
             receiptId: receipt.id,
             agentRunId: agentRun.id,
-            status: "PENDING",
             proposedCategory: classification.category,
             proposedGifiCode: gifi?.code ?? classification.gifiCode,
             proposedItc: itc.eligibleITC,
@@ -491,20 +492,35 @@ export async function processReceipt(receiptId: string) {
               ? verification.reason
               : documentation.reason,
           },
-        });
+          {
+            selectedReceiptId: receipt.id,
+            agentRunId: agentRun.id,
+            db: tx,
+          },
+        );
+
+        if (humanReviewTool.status === "FAILURE" || !humanReviewTool.output) {
+          throw new Error("Human review request failed.");
+        }
       }
 
       /*
        * STEP 12: Persist final receipt status
+       *
+       * request_human_review already transitions review cases
+       * to REVIEW_REQUIRED. Only the successful path needs the
+       * explicit COMPLETED transition here.
        */
-      await tx.receipt.update({
-        where: {
-          id: receipt.id,
-        },
-        data: {
-          status: finalReceiptStatus,
-        },
-      });
+      if (!requiresReview) {
+        await tx.receipt.update({
+          where: {
+            id: receipt.id,
+          },
+          data: {
+            status: "COMPLETED",
+          },
+        });
+      }
 
       /*
        * STEP 13: Audit completion
@@ -520,6 +536,14 @@ export async function processReceipt(receiptId: string) {
           status: requiresReview ? "REVIEW_REQUIRED" : "SUCCESS",
           metadata: {
             validationToolCallId: gstValidationTool.toolCallId,
+            documentationToolCallId: documentationTool.toolCallId,
+            classificationToolCallId: classificationTool.toolCallId,
+            gifiToolCallId: gifiTool.toolCallId,
+            itcToolCallId: classificationRequiresReview
+              ? null
+              : (itcTool?.toolCallId ?? null),
+            updateClassificationToolCallId: updateClassificationTool.toolCallId,
+            humanReviewToolCallId: humanReviewTool?.toolCallId ?? null,
             gstHstValidationStatus: gstHstValidation.status,
             gstHstNumber: gstHstValidation.normalizedNumber,
             classification: classification.category,
@@ -532,15 +556,7 @@ export async function processReceipt(receiptId: string) {
         },
       });
 
-      await tx.agentRun.update({
-        where: {
-          id: agentRun.id,
-        },
-        data: {
-          status: "COMPLETED",
-          completedAt: new Date(),
-        },
-      });
+      await completeAgentRun(agentRun.id, tx);
 
       return {
         receiptId: receipt.id,
@@ -554,17 +570,11 @@ export async function processReceipt(receiptId: string) {
         requiresReview,
       };
     } catch (error) {
-      await tx.agentRun.update({
-        where: {
-          id: agentRun.id,
-        },
-        data: {
-          status: "FAILED",
-          completedAt: new Date(),
-          error:
-            error instanceof Error ? error.message : "Unknown processing error",
-        },
-      });
+      await failAgentRun(
+        agentRun.id,
+        error instanceof Error ? error.message : "Unknown processing error",
+        tx,
+      );
 
       await tx.auditEvent.create({
         data: {

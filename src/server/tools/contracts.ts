@@ -50,12 +50,24 @@ export const UpdateExpenseClassificationInputSchema = z.object({
   receiptId: z.string().min(1),
   category: z.string().min(1),
   gifiCode: z.string().nullable(),
+  commercialUsePercentage: z.number().min(0).max(100),
+  grossTax: z.number().nonnegative(),
+  eligibilityPercentage: z.number().min(0).max(1),
+  eligibleItc: z.number().nonnegative(),
+  itcStatus: z.enum(["ELIGIBLE", "PARTIAL", "INELIGIBLE", "REVIEW"]),
+  classificationStatus: z.enum([
+    "PENDING",
+    "CLASSIFIED",
+    "REVIEW_REQUIRED",
+    "REJECTED",
+  ]),
   confidence: z.number().min(0).max(1),
   reason: z.string().min(1),
 });
 
 export const RequestHumanReviewInputSchema = z.object({
   receiptId: z.string().min(1),
+  agentRunId: z.string().min(1),
   proposedCategory: z.string().nullable(),
   proposedGifiCode: z.string().nullable(),
   proposedItc: z.number().nonnegative(),
