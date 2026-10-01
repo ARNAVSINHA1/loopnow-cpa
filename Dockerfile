@@ -1,3 +1,7 @@
+# Loopnow CPA
+# Receipt Processing & GST/HST Bookkeeping
+# Copyright (c) 2026 Arnava Kumar Sinha. All rights reserved.
+
 FROM node:22-alpine AS base
 
 WORKDIR /app

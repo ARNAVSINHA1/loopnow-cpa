@@ -1,3 +1,10 @@
+/*
+ * Loopnow CPA
+ * Receipt Processing & GST/HST Bookkeeping
+ *
+ * Copyright (c) 2026 Arnava Kumar Sinha. All rights reserved.
+ */
+
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const { prismaMock } = vi.hoisted(() => ({
@@ -33,7 +40,7 @@ describe("agent run lifecycle", () => {
     const result = await createAgentRun({
       receiptId: "receipt-1",
       requestId: "request-1",
-      model: "cpa-copilot-v1",
+      model: "deterministic-receipt-workflow-v1",
       provider: "test",
     });
 
@@ -41,7 +48,7 @@ describe("agent run lifecycle", () => {
       data: {
         receiptId: "receipt-1",
         requestId: "request-1",
-        model: "cpa-copilot-v1",
+        model: "deterministic-receipt-workflow-v1",
         provider: "test",
         status: "RUNNING",
         currentStep: "STARTING",

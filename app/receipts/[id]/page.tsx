@@ -1,3 +1,10 @@
+/*
+ * Loopnow CPA
+ * Receipt Processing & GST/HST Bookkeeping
+ *
+ * Copyright (c) 2026 Arnava Kumar Sinha. All rights reserved.
+ */
+
 "use client";
 
 import Link from "next/link";
@@ -373,13 +380,13 @@ export default function ReceiptDetailsPage() {
           </div>
         </section>
 
-        {/* Agent Execution */}
+        {/* Processing Status */}
         {processingStatus && (
           <section className="mb-6 rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
             <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-start">
               <div>
                 <div className="flex items-center gap-3">
-                  <h2 className="text-lg font-semibold">Agent Execution</h2>
+                  <h2 className="text-lg font-semibold">Processing Status</h2>
 
                   {isAgentRunning && (
                     <span className="inline-flex items-center gap-2 rounded-full bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-700">
@@ -390,7 +397,7 @@ export default function ReceiptDetailsPage() {
                 </div>
 
                 <p className="mt-1 text-sm text-slate-500">
-                  Live processing state from the receipt agent.
+                  Live persisted processing state.
                 </p>
               </div>
 

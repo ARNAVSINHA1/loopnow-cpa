@@ -1,7 +1,17 @@
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+/*
+ * Loopnow CPA
+ * Receipt Processing & GST/HST Bookkeeping
+ *
+ * Copyright (c) 2026 Arnava Kumar Sinha. All rights reserved.
+ */
+
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { prisma } from "../../src/server/db";
+import * as receiptAgent from "../../src/server/agent/receipt-agent";
 import { processReceipt } from "../../src/server/processing/receipt.processor";
+import { createReceipt } from "../../src/server/receipts/receipt.service";
+import { GET as getProcessingStatus } from "../../app/api/receipts/[id]/processing-status/route";
 
 const TEST_RECEIPT_ID = "integration-meal-receipt";
 
@@ -291,6 +301,123 @@ describe("Receipt processor integration", () => {
             id: testReceiptId,
           },
         });
+      }
+    }
+  });
+
+  it("creates an AgentRun only when processing claims a pending receipt", async () => {
+    let releaseAgent!: () => void;
+    let signalAgentEntered!: () => void;
+    const agentGate = new Promise<void>((resolve) => {
+      releaseAgent = resolve;
+    });
+    const agentEntered = new Promise<void>((resolve) => {
+      signalAgentEntered = resolve;
+    });
+    const runAgent = receiptAgent.runReceiptAgent;
+    const runAgentSpy = vi
+      .spyOn(receiptAgent, "runReceiptAgent")
+      .mockImplementation(async (context) => {
+        signalAgentEntered();
+        await agentGate;
+        return runAgent(context);
+      });
+    let receiptId: string | undefined;
+
+    try {
+      const receipt = await createReceipt({
+        vendor: "Staples",
+        description: "Office supplies",
+        subtotal: 100,
+        taxAmount: 5,
+        total: 105,
+        taxType: "GST",
+        gstHstNumber: "123456789RT0001",
+        commercialUsePercentage: 100,
+      });
+      receiptId = receipt.id;
+
+      expect(receipt.status).toBe("PENDING");
+      expect(
+        await prisma.agentRun.count({ where: { receiptId: receipt.id } }),
+      ).toBe(0);
+
+      const creationAudit = await prisma.auditEvent.findFirst({
+        where: { receiptId: receipt.id, action: "RECEIPT_CREATED" },
+      });
+      expect(creationAudit?.agentRunId).toBeNull();
+
+      const initialStatusResponse = await getProcessingStatus(
+        new Request(
+          `http://localhost/api/receipts/${receipt.id}/processing-status`,
+        ),
+        { params: Promise.resolve({ id: receipt.id }) },
+      );
+      const initialStatus = (await initialStatusResponse.json()).data;
+
+      expect(initialStatus.receiptStatus).toBe("PENDING");
+      expect(initialStatus.agentRunStatus).toBeNull();
+      expect(initialStatus.currentStep).toBeNull();
+      expect(initialStatus.message).toBe("Receipt processing has not started.");
+
+      const processing = processReceipt(receipt.id);
+      await agentEntered;
+
+      const duringRun = await prisma.agentRun.findMany({
+        where: { receiptId: receipt.id },
+      });
+      expect(duringRun).toHaveLength(1);
+      expect(duringRun[0]?.status).toBe("RUNNING");
+
+      const claimedReceipt = await prisma.receipt.findUnique({
+        where: { id: receipt.id },
+      });
+      expect(claimedReceipt?.status).toBe("PROCESSING");
+
+      releaseAgent();
+      const result = await processing;
+      expect(result.status).toBe("COMPLETED");
+
+      const persisted = await prisma.receipt.findUnique({
+        where: { id: receipt.id },
+        include: {
+          agentRuns: { include: { toolCalls: true } },
+          auditEvents: true,
+        },
+      });
+
+      expect(persisted?.agentRuns).toHaveLength(1);
+      expect(persisted?.agentRuns[0]?.status).toBe("COMPLETED");
+      expect(persisted?.agentRuns[0]?.toolCalls.length).toBeGreaterThan(0);
+      expect(persisted?.auditEvents.map((event) => event.action)).toEqual(
+        expect.arrayContaining([
+          "RECEIPT_CREATED",
+          "PROCESSING_STARTED",
+          "PROCESSING_COMPLETED",
+        ]),
+      );
+    } finally {
+      releaseAgent?.();
+      runAgentSpy.mockRestore();
+
+      if (receiptId) {
+        const receipt = await prisma.receipt.findUnique({
+          where: { id: receiptId },
+          include: { agentRuns: true },
+        });
+
+        if (receipt) {
+          await prisma.toolCall.deleteMany({
+            where: {
+              agentRunId: { in: receipt.agentRuns.map((run) => run.id) },
+            },
+          });
+          await prisma.auditEvent.deleteMany({ where: { receiptId } });
+          await prisma.approval.deleteMany({ where: { receiptId } });
+          await prisma.expense.deleteMany({ where: { receiptId } });
+          await prisma.agentRun.deleteMany({ where: { receiptId } });
+          await prisma.receipt.delete({ where: { id: receiptId } });
+        }
       }
     }
   });

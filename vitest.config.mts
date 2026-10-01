@@ -1,3 +1,10 @@
+/*
+ * Loopnow CPA
+ * Receipt Processing & GST/HST Bookkeeping
+ *
+ * Copyright (c) 2026 Arnava Kumar Sinha. All rights reserved.
+ */
+
 import { defineConfig } from "vitest/config";
 import { fileURLToPath, URL } from "node:url";
 import dotenv from "dotenv";

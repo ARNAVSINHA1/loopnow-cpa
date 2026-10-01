@@ -1,3 +1,10 @@
+/*
+ * Loopnow CPA
+ * Receipt Processing & GST/HST Bookkeeping
+ *
+ * Copyright (c) 2026 Arnava Kumar Sinha. All rights reserved.
+ */
+
 import { beforeEach, afterEach, describe, expect, it, vi } from "vitest";
 
 const prismaMock = vi.hoisted(() => ({

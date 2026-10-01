@@ -1,3 +1,10 @@
+/*
+ * Loopnow CPA
+ * Receipt Processing & GST/HST Bookkeeping
+ *
+ * Copyright (c) 2026 Arnava Kumar Sinha. All rights reserved.
+ */
+
 import { classifyExpense } from "@/server/domain/classification/classification-rules";
 import { evaluateDocumentation } from "@/server/domain/cra/documentation-rules";
 import {

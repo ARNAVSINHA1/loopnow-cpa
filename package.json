@@ -1,6 +1,8 @@
 {
-  "name": "loopnow-cpa-copilot",
+  "name": "loopnow-cpa",
   "version": "0.1.0",
+  "description": "Receipt processing and GST/HST bookkeeping assessment application",
+  "author": "Arnava Kumar Sinha",
   "private": true,
   "scripts": {
     "dev": "next dev",

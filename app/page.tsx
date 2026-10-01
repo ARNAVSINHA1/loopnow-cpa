@@ -1,3 +1,10 @@
+/*
+ * Loopnow CPA
+ * Receipt Processing & GST/HST Bookkeeping
+ *
+ * Copyright (c) 2026 Arnava Kumar Sinha. All rights reserved.
+ */
+
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
@@ -113,14 +120,17 @@ export default function DashboardPage() {
       <div className="mx-auto max-w-7xl px-6 py-8">
         <header className="mb-8 flex items-center justify-between">
           <div>
-            <p className="text-sm font-medium text-blue-600">LoopNow</p>
+            <p className="text-sm font-medium text-blue-600">Loopnow CPA</p>
 
             <h1 className="mt-1 text-3xl font-bold tracking-tight">
-              CPA Copilot
+              Receipt Processing
             </h1>
 
             <p className="mt-2 text-sm text-slate-500">
-              Receipt classification, compliance review and ITC workflow.
+              Receipt Processing &amp; GST/HST Bookkeeping
+            </p>
+            <p className="mt-1 text-xs text-slate-400">
+              Copyright (c) 2026 Arnava Kumar Sinha. All rights reserved.
             </p>
           </div>
 

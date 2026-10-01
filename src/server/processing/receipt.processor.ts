@@ -1,3 +1,10 @@
+/*
+ * Loopnow CPA
+ * Receipt Processing & GST/HST Bookkeeping
+ *
+ * Copyright (c) 2026 Arnava Kumar Sinha. All rights reserved.
+ */
+
 import { prisma } from "@/server/db";
 import { runReceiptAgent } from "@/server/agent/receipt-agent";
 import {
@@ -7,7 +14,7 @@ import {
 } from "@/server/agent/agent-run";
 
 const RULE_VERSION = "CRA-PROTOTYPE-v1";
-const MODEL = "cpa-copilot-v1";
+const MODEL = "deterministic-receipt-workflow-v1";
 
 export async function processReceipt(receiptId: string) {
   /*

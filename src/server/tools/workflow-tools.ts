@@ -1,3 +1,10 @@
+/*
+ * Loopnow CPA
+ * Receipt Processing & GST/HST Bookkeeping
+ *
+ * Copyright (c) 2026 Arnava Kumar Sinha. All rights reserved.
+ */
+
 import prisma from "@/server/db/prisma";
 import type { DatabaseClient } from "@/server/db/types";
 import {
@@ -430,6 +437,10 @@ export async function getProcessingStatus(
         ? "Receipt is awaiting human review."
         : receipt.status === "COMPLETED"
           ? "Receipt processing is complete."
+          : receipt.status === "PENDING"
+            ? "Receipt processing has not started."
+            : receipt.status === "ERROR"
+              ? "Receipt processing failed."
           : "Receipt processing is in progress.",
   });
 }

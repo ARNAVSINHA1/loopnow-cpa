@@ -1,3 +1,10 @@
+/*
+ * Loopnow CPA
+ * Receipt Processing & GST/HST Bookkeeping
+ *
+ * Copyright (c) 2026 Arnava Kumar Sinha. All rights reserved.
+ */
+
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const { prismaMock, runReceiptAgentMock, failAgentRunMock } = vi.hoisted(
@@ -64,7 +71,7 @@ describe("receipt processor error recovery", () => {
           action: "PROCESSING_FAILED",
           status: "FAILURE",
           ruleVersion: "CRA-PROTOTYPE-v1",
-          model: "cpa-copilot-v1",
+          model: "deterministic-receipt-workflow-v1",
         }),
       }),
     );

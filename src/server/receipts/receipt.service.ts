@@ -1,3 +1,10 @@
+/*
+ * Loopnow CPA
+ * Receipt Processing & GST/HST Bookkeeping
+ *
+ * Copyright (c) 2026 Arnava Kumar Sinha. All rights reserved.
+ */
+
 import { prisma } from "@/server/db";
 import type { CreateReceiptInput } from "./receipt.schema";
 
@@ -52,20 +59,11 @@ export async function createReceipt(input: CreateReceiptInput) {
       },
     });
 
-    const agentRun = await tx.agentRun.create({
-      data: {
-        receiptId: receipt.id,
-        requestId: crypto.randomUUID(),
-        provider: "internal",
-        model: "cpa-copilot-v1",
-      },
-    });
-
     await tx.auditEvent.create({
       data: {
         actor: "system",
         receiptId: receipt.id,
-        agentRunId: agentRun.id,
+        agentRunId: null,
         action: "RECEIPT_CREATED",
         status: "SUCCESS",
         metadata: {
