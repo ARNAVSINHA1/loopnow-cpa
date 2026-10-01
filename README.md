@@ -47,7 +47,9 @@ The LLM is intended for interpretation, planning, classification, tool selection
 
 Deterministic application code remains responsible for financial calculations, thresholds, validation, GIFI verification, state transitions, persistence, authorization, and audit records.
 
-Current implementation note: The current system has a deterministic receipt-processing pipeline with persisted ToolCall records. The full runtime tool layer with strict Zod-defined tool contracts and an agent execution loop is being added incrementally.
+Current implementation status: The system now has a deterministic receipt-processing pipeline, explicit runtime tools with strict Zod contracts, persisted AgentRun and ToolCall state, human-review workflows, processing-status APIs, and a receipt execution UI.
+
+The current agent runtime executes the bookkeeping workflow through explicit tools while deterministic business rules remain the source of truth for financial calculations, compliance validation, GIFI verification, state transitions, and persistence.
 
 ---
 
@@ -392,18 +394,56 @@ The current receipt processor records each deterministic processing stage as a T
 
 These records provide an auditable execution history.
 
-A dedicated runtime tool layer with strict input/output schemas is planned and is the next architectural step.
+The runtime tool layer is implemented with strict Zod-defined input and output contracts.
+
+The current tool registry includes:
+
+    get_current_receipt
+    get_receipt_details
+    validate_cra_documentation
+    validate_gst_hst_number_format
+    calculate_eligible_itc
+    classify_expense
+    assign_gifi_code
+    update_expense_classification
+    request_human_review
+    get_processing_status
+
+Tool execution is routed through a centralized tool executor. Each execution creates a persisted ToolCall record and records:
+
+- tool name
+- validated input
+- output
+- status
+- start time
+- completion time
+- latency
+- error information
+
+AgentRun state additionally tracks:
+
+- current step
+- current tool
+- iteration
+- execution status
+- completion state
+- execution errors
+
+This makes the processing workflow observable and auditable at the application level.
 
 Current processing records include tools such as:
 
 ```text
-receipt_validation
+get_current_receipt
+get_receipt_details
+validate_cra_documentation
 validate_gst_hst_number_format
-documentation_rules
-expense_classification
-gifi_mapping
-itc_calculation
-self_verification
+classify_expense
+assign_gifi_code
+calculate_eligible_itc
+update_expense_classification
+request_human_review
+get_processing_status
 ```
 
 Each tool execution records information such as:
@@ -540,9 +580,23 @@ Current unit tests cover:
 Current test status:
 
 ```text
-Test Files: 5 passed
-Tests:      38 passed
+Test Files: 11 passed
+Tests:      67 passed
 ```
+
+The current test suite covers:
+
+- agent-run lifecycle
+- tool contracts
+- receipt tools
+- compliance tools
+- classification tools
+- workflow tools
+- GST/HST rules
+- CRA documentation rules
+- meals and entertainment rules
+- GIFI rules
+- end-to-end receipt processing
 
 TypeScript compilation is also checked with:
 
@@ -552,7 +606,48 @@ npx tsc --noEmit
 
 ---
 
-# 15. Verified End-to-End Scenarios
+# 15. Agent Execution State
+
+Each receipt-processing run is represented by an AgentRun.
+
+The AgentRun tracks:
+
+    RUNNING
+        |
+        +--> currentStep
+        |
+        +--> currentTool
+        |
+        +--> iteration
+        |
+        +--> ToolCall history
+        |
+        v
+    COMPLETED / FAILED
+
+Tool execution is persisted independently through ToolCall records.
+
+The application exposes the current execution state through:
+
+    GET /api/receipts/:id/processing-status
+
+The processing-status response includes:
+
+- receipt status
+- agent run status
+- current step
+- current tool
+- iteration
+- latest tool
+- latest tool status
+- pending human approval
+- human-readable processing message
+
+The receipt detail UI consumes this state and displays an Agent Execution panel alongside the receipt and compliance information.
+
+---
+
+# 16. Verified End-to-End Scenarios
 
 ## Scenario A — Valid GST/HST
 
@@ -609,7 +704,35 @@ The audit event records the GST validation status and the associated validation 
 
 ---
 
-# 16. Database
+## Scenario C — Business Meal with 50% ITC Limitation
+
+Receipt:
+
+    Vendor:                 The Keg
+    Description:            Business dinner
+    Tax:                    $12.00
+    GST/HST Number:         123456789RT0001
+    Commercial Use:         100%
+
+Observed result:
+
+    Classification:         Meals and Entertainment
+    GIFI:                   8523
+    Documentation:          sufficient
+    ITC Status:             PARTIAL
+    Eligible ITC:            $6.00
+    Receipt Status:         COMPLETED
+    Human Review:           not required
+
+The deterministic meals policy applies the ordinary 50% ITC limitation:
+
+    $12.00 × 50% = $6.00
+
+The integration test verifies this complete processing path.
+
+---
+
+# 17. Database
 
 PostgreSQL is used as the persistent application database.
 
@@ -633,7 +756,7 @@ Development PostgreSQL is provided through Docker Compose.
 
 ---
 
-# 17. Local Development
+# 18. Local Development
 
 ## Requirements
 
@@ -680,7 +803,7 @@ http://localhost:3000
 
 ---
 
-# 18. Useful Commands
+# 19. Useful Commands
 
 Run the development server:
 
@@ -725,21 +848,25 @@ npm run format
 ```
 
 Run ESLint:
+
 ```bash
 npm run lint
 ```
 
 Run TypeScript validation:
+
 ```bash
 npx tsc --noEmit
 ```
 
 Run tests:
+
 ```bash
 npm test
 ```
 
 Recommended pre-commit verification:
+
 ```bash
 npm run format
 npm run lint
@@ -749,7 +876,7 @@ npm test
 
 ---
 
-# 19. Environment Variables
+# 20. Environment Variables
 
 Create:
 
@@ -769,7 +896,7 @@ API keys must never be exposed in client-side bundles.
 
 ---
 
-# 20. Security Principles
+# 21. Security Principles
 
 The system follows these principles:
 
@@ -798,7 +925,7 @@ must be treated as untrusted receipt content.
 
 ---
 
-# 21. Tax Advice Boundary
+# 22. Tax Advice Boundary
 
 This application is a bookkeeping automation prototype and does not replace professional tax advice.
 
@@ -814,7 +941,7 @@ When required information is unavailable:
 
 ---
 
-# 22. Planned Agent Architecture
+# 23. Planned Agent Architecture
 
 The target architecture is:
 
@@ -876,7 +1003,65 @@ Audit Event
 
 ---
 
-# 23. Roadmap
+# 24. Current Runtime Architecture
+
+The implemented runtime currently follows:
+
+    React Receipt UI
+            |
+            v
+    Next.js API Routes
+            |
+            v
+    Receipt Processor
+            |
+            v
+    Receipt Agent
+            |
+            v
+    Tool Executor
+            |
+      +-----+-------------------------------+
+      |     |       |       |               |
+      v     v       v       v               v
+    Receipt GST   CRA     GIFI          Classification
+    Tools  Tools  Rules   Tools         Tools
+      |     |       |       |               |
+      +-----+-------+-------+---------------+
+                        |
+                        v
+                    PostgreSQL
+                        |
+              +---------+---------+
+              |                   |
+              v                   v
+          AgentRun             ToolCall
+              |                   |
+              +---------+---------+
+                        |
+                        v
+                  Audit Events
+                        |
+                        v
+                 Human Approval
+
+The current architecture intentionally keeps financial and compliance decisions deterministic.
+
+The agent coordinates the workflow, but deterministic application code owns:
+
+- calculations
+- documentation thresholds
+- GST/HST validation
+- ITC eligibility
+- meals limitations
+- GIFI verification
+- state transitions
+- persistence
+- audit records
+
+---
+
+# 25. Roadmap
 
 The following capabilities are being implemented incrementally:
 
@@ -897,15 +1082,16 @@ The following capabilities are being implemented incrementally:
 - [x] Unit tests for GST/HST and documentation boundaries
 - [x] Full meals/entertainment processor integration
 - [ ] Complete GIFI catalogue
-- [ ] Explicit Zod tool contracts
-- [ ] `get_current_receipt`
-- [ ] `get_receipt_details`
-- [ ] `get_processing_status`
-- [ ] `update_expense_classification`
-- [ ] `request_human_review`
+- [x] Explicit Zod tool contracts
+- [x] `get_current_receipt`
+- [x] `get_receipt_details`
+- [x] `get_processing_status`
+- [x] `update_expense_classification`
+- [x] `request_human_review`
 - [ ] Bidirectional agent/application state
 - [ ] Streaming agent responses
-- [ ] Visible tool activity UI
+- [x] Visible agent execution state UI
+- [ ] Real-time visible tool activity
 - [ ] LLM provider abstraction
 - [ ] Prompt injection evaluation
 - [x] Integration tests
@@ -919,7 +1105,7 @@ The following capabilities are being implemented incrementally:
 
 ---
 
-# 24. Design Principles
+# 26. Design Principles
 
 ### Deterministic over probabilistic
 
@@ -947,10 +1133,25 @@ Financial mutations requiring review must not bypass the approval workflow.
 
 ---
 
-# 25. Status
+# 27. Status
 
 This project is under active development as a production-oriented assessment prototype.
 
 The current implementation has a functioning deterministic receipt-processing pipeline, PostgreSQL persistence, CRA documentation rules, GST/HST validation, ITC calculation, GIFI validation, human review, approval handling, and audit/tool-call persistence.
 
 The remaining work focuses on completing the agentic layer, streaming, state synchronization, explicit tool contracts, evaluation, observability, security hardening, and production deployment.
+
+# 28. Next Engineering Milestones
+
+The next implementation milestones are:
+
+1. Commit AgentRun state before long-running execution.
+2. Persist each tool execution incrementally so intermediate state is observable.
+3. Expose ToolCall history through an API.
+4. Add real-time execution streaming to the receipt UI.
+5. Display individual tool calls and their results in the UI.
+6. Add stronger authorization around financial mutations.
+7. Expand adversarial and prompt-injection evaluation coverage.
+8. Add the 50+ receipt evaluation dataset required by the assessment.
+9. Add Docker production-build verification.
+10. Complete architecture and deployment documentation.
