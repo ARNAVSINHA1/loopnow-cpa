@@ -47,6 +47,8 @@ The LLM is intended for interpretation, planning, classification, tool selection
 
 Deterministic application code remains responsible for financial calculations, thresholds, validation, GIFI verification, state transitions, persistence, authorization, and audit records.
 
+Current implementation note: The current system has a deterministic receipt-processing pipeline with persisted ToolCall records. The full runtime tool layer with strict Zod-defined tool contracts and an agent execution loop is being added incrementally.
+
 ---
 
 # 2. Current Technology Stack
@@ -100,7 +102,6 @@ loopnow-cpa/
 │
 ├── prisma/
 │   ├── migrations/
-│   ├── seed/
 │   └── schema.prisma
 │
 ├── src/
@@ -123,9 +124,13 @@ loopnow-cpa/
 │       └── approvals/
 │
 ├── tests/
-│   └── unit/
-│       ├── documentation-rules.test.ts
-│       └── gst-hst-rules.test.ts
+│    ├── unit/
+│    │   ├── documentation-rules.test.ts
+│    │   ├── gifi-rules.test.ts
+│    │   ├── gst-hst-rules.test.ts
+│    │   └── meals-rules.test.ts
+│    └── integration/
+│        └── receipt-processor.test.ts
 │
 ├── docker-compose.yml
 ├── package.json
@@ -292,7 +297,9 @@ Applicable ITC:     50%
 Eligible ITC:       $6.00
 ```
 
-Meal-rule integration into the complete receipt-processing flow is currently being implemented.
+Meal-rule integration is implemented in the receipt-processing pipeline.
+
+For the standard business-meal case, the deterministic policy applies a 50% ITC limitation. The current processor also supports configured exceptions for charity/public institutions and long-haul truck drivers.
 
 ---
 
@@ -381,7 +388,11 @@ The system records individual tool executions in PostgreSQL.
 
 # 11. Tool Execution and Auditability
 
-Tool calls are persisted using the `ToolCall` model.
+The current receipt processor records each deterministic processing stage as a ToolCall record in PostgreSQL.
+
+These records provide an auditable execution history.
+
+A dedicated runtime tool layer with strict input/output schemas is planned and is the next architectural step.
 
 Current processing records include tools such as:
 
@@ -493,6 +504,14 @@ State-changing operations are being hardened further toward explicit idempotency
 
 # 14. Current Test Coverage
 
+Current test suites include:
+
+- GST/HST validation
+- CRA documentation boundaries
+- Meals & Entertainment rules
+- GIFI mapping
+- Receipt-processing integration scenarios
+
 Current unit tests cover:
 
 ### GST/HST
@@ -521,8 +540,8 @@ Current unit tests cover:
 Current test status:
 
 ```text
-Test Files: 2 passed
-Tests:      19 passed
+Test Files: 5 passed
+Tests:      38 passed
 ```
 
 TypeScript compilation is also checked with:
@@ -699,6 +718,35 @@ Build production application:
 npm run build
 ```
 
+Format TypeScript:
+
+```bash
+npm run format
+```
+
+Run ESLint:
+```bash
+npm run lint
+```
+
+Run TypeScript validation:
+```bash
+npx tsc --noEmit
+```
+
+Run tests:
+```bash
+npm test
+```
+
+Recommended pre-commit verification:
+```bash
+npm run format
+npm run lint
+npx tsc --noEmit
+npm test
+```
+
 ---
 
 # 19. Environment Variables
@@ -847,7 +895,7 @@ The following capabilities are being implemented incrementally:
 - [x] Audit events
 - [x] GST validation audit linkage
 - [x] Unit tests for GST/HST and documentation boundaries
-- [ ] Full meals/entertainment processor integration
+- [x] Full meals/entertainment processor integration
 - [ ] Complete GIFI catalogue
 - [ ] Explicit Zod tool contracts
 - [ ] `get_current_receipt`
@@ -860,7 +908,7 @@ The following capabilities are being implemented incrementally:
 - [ ] Visible tool activity UI
 - [ ] LLM provider abstraction
 - [ ] Prompt injection evaluation
-- [ ] Integration tests
+- [x] Integration tests
 - [ ] E2E tests
 - [ ] 50+ evaluation dataset
 - [ ] Observability / tracing
