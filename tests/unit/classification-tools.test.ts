@@ -38,6 +38,30 @@ describe("classification tools", () => {
       expect(result.gifiCode).toBeNull();
       expect(result.confidence).toBe(0);
     });
+
+    it("requires review for unsupported structured meal-exception proposals", async () => {
+      const result = await classifyExpenseTool({
+        receiptId: "receipt-004",
+        vendor: "The Keg",
+        description: "Business dinner",
+        mealExceptionProposal: "claimEverything",
+      });
+
+      expect(result.mealException).toBeNull();
+      expect(result.mealExceptionRequiresReview).toBe(true);
+    });
+
+    it("does not apply a meal exception to an office expense", async () => {
+      const result = await classifyExpenseTool({
+        receiptId: "receipt-005",
+        vendor: "Staples",
+        description: "Printer paper",
+        mealExceptionProposal: "charityOrPublicInstitution",
+      });
+
+      expect(result.category).toBe("Office Expenses");
+      expect(result.mealExceptionRequiresReview).toBe(true);
+    });
   });
 
   describe("assignGifiCode", () => {

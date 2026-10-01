@@ -56,12 +56,16 @@ export function evaluateDocumentation(input: {
     };
   }
 
-  if (gstHstValidation.status === "invalid_format") {
+  if (
+    gstHstValidation.status === "invalid_format" ||
+    gstHstValidation.status === "malformed" ||
+    gstHstValidation.status === "suspicious"
+  ) {
     return {
       tier,
       status: "insufficient",
       reason:
-        "The GST/HST registration number is present but does not match the expected Canadian format.",
+        "The GST/HST registration number is present but does not meet the expected Canadian format or appears suspicious.",
       gstHstValidation,
     };
   }

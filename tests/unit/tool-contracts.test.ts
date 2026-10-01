@@ -4,6 +4,7 @@ import {
   GetReceiptDetailsInputSchema,
   ValidateGstHstNumberFormatInputSchema,
 } from "@/server/tools/contracts";
+import { createReceiptSchema } from "@/server/receipts/receipt.schema";
 
 describe("tool contracts", () => {
   it("accepts valid receipt details input", () => {
@@ -49,5 +50,17 @@ describe("tool contracts", () => {
     });
 
     expect(result.success).toBe(true);
+  });
+
+  it("rejects client-supplied classification at receipt creation", () => {
+    const result = createReceiptSchema.safeParse({
+      vendor: "Staples",
+      subtotal: 100,
+      taxAmount: 5,
+      total: 105,
+      category: "Arbitrary category",
+    });
+
+    expect(result.success).toBe(false);
   });
 });

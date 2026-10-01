@@ -17,6 +17,7 @@ describe("receipt tool result contracts", () => {
         taxType: "HST",
         gstHstNumber: "123456789RT0001",
         commercialUsePercentage: 100,
+        mealExceptionProposal: null,
         category: "Office Expenses",
         receiptAvailable: true,
         status: "COMPLETED",

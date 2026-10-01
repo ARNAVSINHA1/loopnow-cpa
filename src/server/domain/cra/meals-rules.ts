@@ -1,3 +1,11 @@
+import { z } from "zod";
+
+export const MealITCExceptionSchema = z.enum([
+  "standard",
+  "charityOrPublicInstitution",
+  "longHaulTruckDriver",
+]);
+
 export const MealITCPolicy = {
   standard: 0.5,
   charityOrPublicInstitution: 1.0,
@@ -6,6 +14,10 @@ export const MealITCPolicy = {
 
 export type MealITCException =
   "standard" | "charityOrPublicInstitution" | "longHaulTruckDriver";
+
+export function isMealITCException(value: unknown): value is MealITCException {
+  return MealITCExceptionSchema.safeParse(value).success;
+}
 
 export function getMealITCPercentage(
   exception: MealITCException = "standard",

@@ -87,6 +87,7 @@ export default function ReceiptDetailsPage() {
   const [processing, setProcessing] = useState(false);
   const [processingStatus, setProcessingStatus] =
     useState<ProcessingStatus | null>(null);
+  const [streamUnavailable, setStreamUnavailable] = useState(false);
 
   async function loadReceipt() {
     try {
@@ -185,11 +186,54 @@ export default function ReceiptDetailsPage() {
       return;
     }
 
+    const source = new EventSource(`/api/receipts/${receiptId}/stream`);
+
+    const handleStatus = (event: MessageEvent) => {
+      try {
+        const payload = JSON.parse(event.data) as ProcessingStatus;
+        setProcessingStatus(payload);
+
+        if (
+          ["COMPLETED", "REVIEW_REQUIRED", "ERROR"].includes(
+            payload.receiptStatus ?? "",
+          ) ||
+          payload.agentRunStatus === "FAILED"
+        ) {
+          source.close();
+          setStreamUnavailable(false);
+        }
+      } catch {
+        // Ignore invalid stream payloads.
+      }
+    };
+
+    source.addEventListener("processing_status", handleStatus);
+    source.addEventListener("step_changed", handleStatus);
+    source.addEventListener("tool_started", handleStatus);
+    source.addEventListener("tool_completed", handleStatus);
+    source.addEventListener("approval_required", handleStatus);
+    source.addEventListener("agent_run_completed", handleStatus);
+    source.addEventListener("agent_run_failed", handleStatus);
+
+    source.onopen = () => setStreamUnavailable(false);
+    source.onerror = () => setStreamUnavailable(true);
+    source.addEventListener("stream_error", () => setStreamUnavailable(true));
+
+    return () => {
+      source.close();
+    };
+  }, [receiptId]);
+
+  useEffect(() => {
+    if (!receiptId) {
+      return;
+    }
+
     const isRunning =
       processingStatus?.agentRunStatus === "RUNNING" ||
       receipt?.status === "PROCESSING";
 
-    if (!isRunning) {
+    if (!isRunning && !streamUnavailable) {
       return;
     }
 
@@ -200,26 +244,17 @@ export default function ReceiptDetailsPage() {
     return () => {
       window.clearInterval(interval);
     };
-  }, [receiptId, processingStatus?.agentRunStatus, receipt?.status]);
+  }, [
+    receiptId,
+    processingStatus?.agentRunStatus,
+    receipt?.status,
+    streamUnavailable,
+  ]);
 
   async function processReceipt() {
     try {
       setProcessing(true);
       setError("");
-
-      setProcessingStatus({
-        status: "SUCCESS",
-        receiptId,
-        receiptStatus: "PROCESSING",
-        agentRunStatus: "RUNNING",
-        currentStep: "STARTING",
-        currentTool: null,
-        iteration: 0,
-        latestTool: null,
-        latestToolStatus: null,
-        pendingApproval: false,
-        message: "Receipt processing has started.",
-      });
 
       const response = await fetch(`/api/receipts/${receiptId}/process`, {
         method: "POST",
@@ -283,8 +318,7 @@ export default function ReceiptDetailsPage() {
 
   const isAgentRunning =
     processingStatus?.agentRunStatus === "RUNNING" ||
-    receipt.status === "PROCESSING" ||
-    processing;
+    receipt.status === "PROCESSING";
 
   return (
     <main className="min-h-screen bg-slate-50 text-slate-900">

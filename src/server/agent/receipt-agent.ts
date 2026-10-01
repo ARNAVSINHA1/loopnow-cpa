@@ -14,7 +14,13 @@ export type ReceiptAgentResult = {
   classification: string | null;
   gifiCode: string | null;
   gstHstValidationStatus:
-    "missing" | "invalid_format" | "valid_format" | "unavailable" | null;
+    | "missing"
+    | "invalid_format"
+    | "malformed"
+    | "suspicious"
+    | "valid_format"
+    | "unavailable"
+    | null;
   documentationStatus: "sufficient" | "insufficient" | "review" | null;
   itcStatus: "eligible" | "partial" | "ineligible" | "review" | null;
   eligibleItc: number;
@@ -30,6 +36,7 @@ type ReceiptData = {
   taxAmount: number;
   gstHstNumber: string | null;
   commercialUsePercentage: number | null;
+  mealExceptionProposal: string | null;
 };
 
 type ClassificationData = {
@@ -38,7 +45,8 @@ type ClassificationData = {
   confidence: number;
   reason: string;
   mealException?:
-    "standard" | "charityOrPublicInstitution" | "longHaulTruckDriver";
+    "standard" | "charityOrPublicInstitution" | "longHaulTruckDriver" | null;
+  mealExceptionRequiresReview?: boolean;
 };
 
 type DocumentationData = {
@@ -126,7 +134,13 @@ export async function runReceiptAgent(
   }
 
   const gstValidation = gstTool.output as {
-    status: "missing" | "invalid_format" | "valid_format" | "unavailable";
+    status:
+      | "missing"
+      | "invalid_format"
+      | "malformed"
+      | "suspicious"
+      | "valid_format"
+      | "unavailable";
     normalizedNumber: string | null;
     reason: string;
     externallyVerified: false;
@@ -170,6 +184,7 @@ export async function runReceiptAgent(
       receiptId: receipt.id,
       vendor: receipt.vendor,
       description: receipt.description,
+      mealExceptionProposal: receipt.mealExceptionProposal,
     },
     {
       selectedReceiptId: context.receiptId,
@@ -218,7 +233,8 @@ export async function runReceiptAgent(
     classification.category === "Unknown" ||
     classification.gifiCode === null ||
     gifi.status === "REVIEW_REQUIRED" ||
-    gifi.gifiCode === null;
+    gifi.gifiCode === null ||
+    classification.mealExceptionRequiresReview === true;
 
   /*
    * STEP 6
@@ -347,6 +363,10 @@ export async function runReceiptAgent(
       receiptId: receipt.id,
       category: classification.category,
       gifiCode: gifi.status === "SUCCESS" ? gifi.gifiCode : null,
+      mealException:
+        requiresReview || classification.category !== "Meals and Entertainment"
+          ? null
+          : (classification.mealException ?? "standard"),
       commercialUsePercentage: commercialUsePercentage * 100,
       grossTax: receipt.taxAmount,
       eligibilityPercentage,
@@ -382,6 +402,7 @@ export async function runReceiptAgent(
         proposedCategory: classification.category,
         proposedGifiCode:
           gifi.status === "SUCCESS" ? gifi.gifiCode : classification.gifiCode,
+        proposedMealException: classification.mealException ?? null,
         proposedItc: itc.eligibleITC,
         reason:
           documentation.status !== "sufficient"

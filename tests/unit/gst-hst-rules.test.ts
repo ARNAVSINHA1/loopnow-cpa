@@ -24,10 +24,25 @@ describe("validateGstHstNumber", () => {
     expect(result.externallyVerified).toBe(false);
   });
 
-  it("rejects a number with an incorrect suffix", () => {
+  it("classifies partially shaped GST/HST strings as malformed", () => {
     const result = validateGstHstNumber("123456789XX0001");
 
-    expect(result.status).toBe("invalid_format");
+    expect(result.status).toBe("malformed");
+    expect(result.externallyVerified).toBe(false);
+  });
+
+  it("flags obviously suspicious GST/HST values for review", () => {
+    const result = validateGstHstNumber("000000000RT0000");
+
+    expect(result.status).toBe("suspicious");
+    expect(result.externallyVerified).toBe(false);
+  });
+
+  it("reports unavailable registration status explicitly", () => {
+    const result = validateGstHstNumber("unavailable");
+
+    expect(result.status).toBe("unavailable");
+    expect(result.externallyVerified).toBe(false);
   });
 
   it("accepts a valid GST/HST format", () => {

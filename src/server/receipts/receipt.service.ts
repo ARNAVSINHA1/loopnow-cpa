@@ -48,7 +48,7 @@ export async function createReceipt(input: CreateReceiptInput) {
         taxType: input.taxType,
         gstHstNumber: input.gstHstNumber,
         commercialUsePercentage: input.commercialUsePercentage,
-        category: input.category,
+        mealExceptionProposal: input.mealExceptionProposal,
       },
     });
 

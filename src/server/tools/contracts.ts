@@ -38,6 +38,7 @@ export const ClassifyExpenseInputSchema = z.object({
   receiptId: z.string().min(1),
   vendor: z.string().min(1),
   description: z.string().nullable(),
+  mealExceptionProposal: z.string().nullable().optional(),
 });
 
 export const AssignGifiCodeInputSchema = z.object({
@@ -50,17 +51,13 @@ export const UpdateExpenseClassificationInputSchema = z.object({
   receiptId: z.string().min(1),
   category: z.string().min(1),
   gifiCode: z.string().nullable(),
+  mealException: z.string().nullable().optional(),
   commercialUsePercentage: z.number().min(0).max(100),
   grossTax: z.number().nonnegative(),
   eligibilityPercentage: z.number().min(0).max(1),
   eligibleItc: z.number().nonnegative(),
   itcStatus: z.enum(["ELIGIBLE", "PARTIAL", "INELIGIBLE", "REVIEW"]),
-  classificationStatus: z.enum([
-    "PENDING",
-    "CLASSIFIED",
-    "REVIEW_REQUIRED",
-    "REJECTED",
-  ]),
+  classificationStatus: z.enum(["CLASSIFIED", "REVIEW_REQUIRED"]),
   confidence: z.number().min(0).max(1),
   reason: z.string().min(1),
 });
@@ -70,6 +67,7 @@ export const RequestHumanReviewInputSchema = z.object({
   agentRunId: z.string().min(1),
   proposedCategory: z.string().nullable(),
   proposedGifiCode: z.string().nullable(),
+  proposedMealException: z.string().nullable().optional(),
   proposedItc: z.number().nonnegative(),
   reason: z.string().min(1),
 });
@@ -131,6 +129,7 @@ export const ReceiptToolDataSchema = z.object({
   taxType: z.string().nullable(),
   gstHstNumber: z.string().nullable(),
   commercialUsePercentage: z.number().nullable(),
+  mealExceptionProposal: z.string().nullable(),
   category: z.string().nullable(),
   receiptAvailable: z.boolean(),
   status: z.string(),
@@ -152,7 +151,9 @@ export const ClassificationToolResultSchema = z.object({
   reason: z.string(),
   mealException: z
     .enum(["standard", "charityOrPublicInstitution", "longHaulTruckDriver"])
+    .nullable()
     .optional(),
+  mealExceptionRequiresReview: z.boolean().optional(),
 });
 
 export const AssignGifiCodeToolResultSchema = z.object({
@@ -197,7 +198,14 @@ export const ProcessingStatusResultSchema = z.object({
 });
 
 export const GstHstValidationResultSchema = z.object({
-  status: z.enum(["missing", "invalid_format", "valid_format", "unavailable"]),
+  status: z.enum([
+    "missing",
+    "invalid_format",
+    "malformed",
+    "suspicious",
+    "valid_format",
+    "unavailable",
+  ]),
   normalizedNumber: z.string().nullable(),
   reason: z.string(),
   externallyVerified: z.literal(false),

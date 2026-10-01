@@ -3,6 +3,7 @@ import {
   getMealITCPercentage,
   applyMealITCLimitation,
 } from "../../src/server/domain/cra/meals-rules";
+import { calculateDeterministicItcLimit } from "@/server/approvals/review-validation";
 
 describe("Meal ITC rules", () => {
   it("applies the standard 50% limitation", () => {
@@ -31,6 +32,71 @@ describe("Meal ITC rules", () => {
 
   it("calculates 80% eligibility for long-haul truck driver", () => {
     expect(applyMealITCLimitation(1, "longHaulTruckDriver")).toBe(0.8);
+  });
+
+  it("calculates $12 meal tax as $6, $12, and $9.60 by supported policy", () => {
+    expect(
+      calculateDeterministicItcLimit(
+        12,
+        100,
+        "Meals and Entertainment",
+        "standard",
+      ),
+    ).toBe(6);
+    expect(
+      calculateDeterministicItcLimit(
+        12,
+        100,
+        "Meals and Entertainment",
+        "charityOrPublicInstitution",
+      ),
+    ).toBe(12);
+    expect(
+      calculateDeterministicItcLimit(
+        12,
+        100,
+        "Meals and Entertainment",
+        "longHaulTruckDriver",
+      ),
+    ).toBe(9.6);
+  });
+
+  it("combines commercial use with each supported meal policy", () => {
+    expect(
+      calculateDeterministicItcLimit(
+        12,
+        50,
+        "Meals and Entertainment",
+        "standard",
+      ),
+    ).toBe(3);
+    expect(
+      calculateDeterministicItcLimit(
+        12,
+        50,
+        "Meals and Entertainment",
+        "charityOrPublicInstitution",
+      ),
+    ).toBe(6);
+    expect(
+      calculateDeterministicItcLimit(
+        12,
+        50,
+        "Meals and Entertainment",
+        "longHaulTruckDriver",
+      ),
+    ).toBe(4.8);
+  });
+
+  it("returns zero for an unsupported exception proposal", () => {
+    expect(
+      calculateDeterministicItcLimit(
+        12,
+        100,
+        "Meals and Entertainment",
+        "claimEverything",
+      ),
+    ).toBe(0);
   });
 
   it("clamps commercial use below zero", () => {

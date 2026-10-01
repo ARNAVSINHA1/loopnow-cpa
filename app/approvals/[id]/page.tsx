@@ -9,6 +9,7 @@ type Approval = {
   status: "PENDING" | "APPROVED" | "REJECTED" | "EDITED";
   proposedCategory: string | null;
   proposedGifiCode: string | null;
+  proposedMealException: string | null;
   proposedItc: string | number | null;
   reason: string | null;
   reviewer: string | null;
@@ -47,10 +48,10 @@ export default function ApprovalPage() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
 
-  const [reviewer, setReviewer] = useState("demo-reviewer");
+  const [reviewerToken, setReviewerToken] = useState("");
   const [category, setCategory] = useState("");
   const [gifiCode, setGifiCode] = useState("");
-  const [itc, setItc] = useState("0");
+  const [mealException, setMealException] = useState("standard");
   const [decision, setDecision] = useState("");
 
   useEffect(() => {
@@ -70,7 +71,7 @@ export default function ApprovalPage() {
         setApproval(data);
         setCategory(data.proposedCategory ?? "");
         setGifiCode(data.proposedGifiCode ?? "");
-        setItc(String(Number(data.proposedItc ?? 0)));
+        setMealException(data.proposedMealException ?? "standard");
         setDecision(data.decision ?? "");
       } catch (err) {
         setError(
@@ -88,6 +89,10 @@ export default function ApprovalPage() {
 
   async function submit(action: "APPROVE" | "EDIT" | "REJECT") {
     if (!approval) return;
+    if (!reviewerToken) {
+      setError("Reviewer access token is required.");
+      return;
+    }
 
     setSubmitting(true);
     setError("");
@@ -97,13 +102,14 @@ export default function ApprovalPage() {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          Authorization: `Bearer ${reviewerToken}`,
         },
         body: JSON.stringify({
           action,
-          reviewer,
           category: category || undefined,
           gifiCode: gifiCode || undefined,
-          itc: Number(itc),
+          mealException:
+            category === "Meals and Entertainment" ? mealException : undefined,
           decision:
             decision ||
             (action === "APPROVE"
@@ -289,14 +295,16 @@ export default function ApprovalPage() {
           <div className="mt-5 grid gap-5 md:grid-cols-2">
             <label className="block">
               <span className="text-sm font-medium text-slate-700">
-                Reviewer
+                Reviewer access token
               </span>
 
               <input
-                value={reviewer}
-                onChange={(event) => setReviewer(event.target.value)}
+                type="password"
+                autoComplete="off"
+                value={reviewerToken}
+                onChange={(event) => setReviewerToken(event.target.value)}
                 className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
-                placeholder="Reviewer name"
+                placeholder="Configured reviewer token"
               />
             </label>
 
@@ -326,21 +334,32 @@ export default function ApprovalPage() {
               />
             </label>
 
-            <label className="block">
-              <span className="text-sm font-medium text-slate-700">
-                Eligible ITC
-              </span>
-
-              <input
-                type="number"
-                min="0"
-                step="0.01"
-                value={itc}
-                onChange={(event) => setItc(event.target.value)}
-                className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
-              />
-            </label>
+            {category === "Meals and Entertainment" && (
+              <label className="block">
+                <span className="text-sm font-medium text-slate-700">
+                  Meal exception
+                </span>
+                <select
+                  value={mealException}
+                  onChange={(event) => setMealException(event.target.value)}
+                  className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                >
+                  <option value="standard">Standard (50%)</option>
+                  <option value="charityOrPublicInstitution">
+                    Charity or public institution (100%)
+                  </option>
+                  <option value="longHaulTruckDriver">
+                    Long-haul truck driver (80%)
+                  </option>
+                </select>
+              </label>
+            )}
           </div>
+
+          <p className="mt-4 text-sm text-slate-500">
+            Eligible ITC is recalculated from persisted receipt values when you
+            submit the decision.
+          </p>
 
           <label className="mt-5 block">
             <span className="text-sm font-medium text-slate-700">

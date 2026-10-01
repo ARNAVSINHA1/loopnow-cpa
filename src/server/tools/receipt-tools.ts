@@ -58,6 +58,7 @@ export async function getReceiptDetails(
         receipt.commercialUsePercentage === null
           ? null
           : Number(receipt.commercialUsePercentage),
+      mealExceptionProposal: receipt.mealExceptionProposal,
       category: receipt.category,
       receiptAvailable: receipt.receiptAvailable,
       status: receipt.status,

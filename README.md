@@ -1,6 +1,6 @@
 # Loopnow CPA Copilot
 
-An AI-powered Canadian bookkeeping and GST/HST compliance copilot built for the Loopnow Technologies production engineering assessment.
+An assessment prototype for Canadian bookkeeping and GST/HST receipt processing.
 
 The system processes business receipts using deterministic CRA/business rules, structured tool execution, PostgreSQL persistence, human review workflows, and an auditable processing pipeline.
 
@@ -24,7 +24,7 @@ Loopnow CPA Copilot is designed as an app-aware bookkeeping assistant capable of
 The architecture separates:
 
 ```text
-LLM / Agent
+Deterministic receipt agent
      |
      v
 Explicit Tools
@@ -43,11 +43,25 @@ Deterministic Rules       Application State
           Audit / Review
 ```
 
-The LLM is intended for interpretation, planning, classification, tool selection, ambiguity detection, and explanation.
+There is no external LLM provider call in the current runtime. `receipt-agent.ts` is a deterministic orchestrator that calls fixed server tools; the persisted model label is metadata, not a connected model.
 
 Deterministic application code remains responsible for financial calculations, thresholds, validation, GIFI verification, state transitions, persistence, authorization, and audit records.
 
 Current implementation status: The system now has a deterministic receipt-processing pipeline, explicit runtime tools with strict Zod contracts, persisted AgentRun and ToolCall state, human-review workflows, processing-status APIs, and a receipt execution UI.
+
+## Final implementation notes
+
+The runtime architecture remains intentionally conservative: the application state, tool execution, rule calculations, and approval decisions are persisted server-side. The client can request actions, but it cannot mutate financial outcomes such as eligible ITC, GIFI codes, classification decisions, AgentRun status, or ToolCall status without server-side validation and audit recording.
+
+The human review flow is server-enforced:
+
+1. The agent may create a review request only when the deterministic rules cannot resolve the transaction.
+2. The approval record is created in a pending state and must be explicitly acted on.
+3. Approve, reject, and edit decisions are validated server-side against the controlled GIFI catalogue and deterministic CRA ITC limits.
+4. Any attempt to bypass review, use an unknown GIFI, or supply an invalid ITC is rejected.
+5. Successful and failed review mutations emit audit events with the configured reviewer identity (or an unauthenticated marker), receipt, approval, action, reason, and rule version. Credential values are never recorded.
+
+The repository also includes a local, deterministic evaluation dataset for CRA/ITC validation and a defensive suite of adversarial cases to ensure prompt-injection text cannot bypass the deterministic rule layer.
 
 The current agent runtime executes the bookkeeping workflow through explicit tools while deterministic business rules remain the source of truth for financial calculations, compliance validation, GIFI verification, state transitions, and persistence.
 
@@ -221,6 +235,8 @@ Current deterministic states include:
 ```text
 missing
 invalid_format
+malformed
+suspicious
 valid_format
 unavailable
 ```
@@ -267,7 +283,7 @@ The engine returns:
 }
 ```
 
-The LLM does not perform the final arithmetic.
+No LLM runtime is connected. Final arithmetic is performed by deterministic server code.
 
 ---
 
@@ -577,12 +593,7 @@ Current unit tests cover:
 - malformed GST/HST
 - valid-format GST/HST
 
-Current test status:
-
-```text
-Test Files: 11 passed
-Tests:      67 passed
-```
+Latest verified test status: 19 test files and 110 tests. `npm test` is the source of truth for the current checkout.
 
 The current test suite covers:
 
@@ -771,23 +782,17 @@ Development PostgreSQL is provided through Docker Compose.
 npm install
 ```
 
-## Start PostgreSQL
+## Start the full deployment
+
+Copy `.env.example` to `.env`. Set `POSTGRES_PASSWORD` and the password embedded in `DATABASE_URL` to the same strong value, and replace `APPROVAL_REVIEWER_TOKEN` with a separate long random secret. Then run:
 
 ```bash
-docker compose up -d
+docker compose up --build
 ```
 
-## Run migrations
+Compose waits for PostgreSQL health, runs `prisma migrate deploy` in the app container, and starts the production Next.js server. Migrations are not run during image build. `DATABASE_URL` must use the Compose hostname `postgres` and is passed to the app at runtime.
 
-```bash
-npx prisma migrate dev
-```
-
-## Seed development data
-
-```bash
-npm run db:seed
-```
+For a host-based dev server, start only the database with `docker compose up -d postgres`, set `DATABASE_URL` to a host-reachable URL such as `localhost`, then run `npx prisma migrate dev` and `npm run dev`. This repository has no seed script.
 
 ## Start the application
 
@@ -827,12 +832,6 @@ Open Prisma Studio:
 
 ```bash
 npx prisma studio
-```
-
-Run database seed:
-
-```bash
-npm run db:seed
 ```
 
 Build production application:
@@ -1063,45 +1062,9 @@ The agent coordinates the workflow, but deterministic application code owns:
 
 # 25. Roadmap
 
-The following capabilities are being implemented incrementally:
+The current assessment implementation includes PostgreSQL persistence, a deterministic receipt workflow, strict tool contracts, persisted AgentRun/ToolCall state, a controlled GIFI subset, human review, SSE status delivery, regular and adversarial evaluation datasets, Docker Compose deployment, and unit/integration tests.
 
-- [x] PostgreSQL persistence
-- [x] Prisma data model
-- [x] Receipt dashboard
-- [x] Receipt processing API
-- [x] Deterministic CRA documentation rules
-- [x] GST/HST format validation
-- [x] Deterministic ITC calculation
-- [x] Office expense classification
-- [x] Controlled GIFI validation structure
-- [x] Human review workflow
-- [x] Approval workflow
-- [x] Tool-call persistence
-- [x] Audit events
-- [x] GST validation audit linkage
-- [x] Unit tests for GST/HST and documentation boundaries
-- [x] Full meals/entertainment processor integration
-- [ ] Complete GIFI catalogue
-- [x] Explicit Zod tool contracts
-- [x] `get_current_receipt`
-- [x] `get_receipt_details`
-- [x] `get_processing_status`
-- [x] `update_expense_classification`
-- [x] `request_human_review`
-- [ ] Bidirectional agent/application state
-- [ ] Streaming agent responses
-- [x] Visible agent execution state UI
-- [ ] Real-time visible tool activity
-- [ ] LLM provider abstraction
-- [ ] Prompt injection evaluation
-- [x] Integration tests
-- [ ] E2E tests
-- [ ] 50+ evaluation dataset
-- [ ] Observability / tracing
-- [ ] Performance measurements
-- [ ] Dockerized application deployment
-- [ ] Architecture documentation
-- [ ] Production hardening
+Known prototype limitations: there is no external LLM call, the GIFI catalogue is intentionally small, there is no general user/session authentication, and CRA registration numbers are format-checked but not externally verified. Approval mutations alone use the configured reviewer-token authorization described below.
 
 ---
 
@@ -1117,7 +1080,7 @@ Business capabilities are exposed through explicit tools with structured inputs 
 
 ### Backend validation over model trust
 
-The model may propose a classification, but the backend verifies it.
+Any future model proposal must be treated as untrusted; the current classifier is deterministic and backend-owned.
 
 ### Review over hallucination
 
@@ -1135,23 +1098,12 @@ Financial mutations requiring review must not bypass the approval workflow.
 
 # 27. Status
 
-This project is under active development as a production-oriented assessment prototype.
+This is an assessment prototype, not a production tax-advice system.
 
-The current implementation has a functioning deterministic receipt-processing pipeline, PostgreSQL persistence, CRA documentation rules, GST/HST validation, ITC calculation, GIFI validation, human review, approval handling, and audit/tool-call persistence.
+The current workflow is deterministic: receipt data is read from PostgreSQL, a fixed sequence of Zod-validated tools executes server-side rules, each ToolCall and AgentRun state is persisted, and ambiguous cases remain behind human review. No external LLM provider is connected.
 
-The remaining work focuses on completing the agentic layer, streaming, state synchronization, explicit tool contracts, evaluation, observability, security hardening, and production deployment.
+`GET /api/receipts/:id/processing-status` returns persisted receipt, AgentRun, ToolCall, and pending-approval state. `GET /api/receipts/:id/stream` transports persisted snapshots over SSE, closes at terminal states, and uses client polling as fallback.
 
-# 28. Next Engineering Milestones
+Approval POST mutations require `APPROVAL_REVIEWER_TOKEN`; the server maps the credential to `APPROVAL_REVIEWER_ID`. The request body cannot set reviewer identity. Compose runs committed Prisma migrations at container startup and passes the runtime `DATABASE_URL` to the app.
 
-The next implementation milestones are:
-
-1. Commit AgentRun state before long-running execution.
-2. Persist each tool execution incrementally so intermediate state is observable.
-3. Expose ToolCall history through an API.
-4. Add real-time execution streaming to the receipt UI.
-5. Display individual tool calls and their results in the UI.
-6. Add stronger authorization around financial mutations.
-7. Expand adversarial and prompt-injection evaluation coverage.
-8. Add the 50+ receipt evaluation dataset required by the assessment.
-9. Add Docker production-build verification.
-10. Complete architecture and deployment documentation.
+`src/server/evaluation/receipt-evaluation.ts` contains 65 executable deterministic cases; the Vitest suite runs every case. `src/server/evaluation/adversarial-evaluation.ts` contains five hostile vendor/description examples that tests pass through deterministic classification as receipt data, not executable instructions.

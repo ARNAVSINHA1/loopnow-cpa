@@ -19,6 +19,7 @@ export async function classifyExpenseTool(input: ClassifyExpenseInput) {
     classifyExpense({
       vendor: parsed.vendor,
       description: parsed.description,
+      mealExceptionProposal: parsed.mealExceptionProposal,
     }),
   );
 }
