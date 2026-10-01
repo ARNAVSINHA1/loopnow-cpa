@@ -1,69 +1,268 @@
-import Image from "next/image";
+"use client";
 
-export default function Home() {
+import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
+
+type Receipt = {
+  id: string;
+  vendor: string;
+  subtotal: string;
+  taxAmount: string;
+  total: string;
+  status: "PENDING" | "PROCESSING" | "REVIEW_REQUIRED" | "COMPLETED" | "ERROR";
+  createdAt: string;
+  expense: {
+    category: string | null;
+    gifiCode: string | null;
+    eligibleItc: string | null;
+    itcStatus: "ELIGIBLE" | "PARTIAL" | "INELIGIBLE" | "REVIEW" | null;
+    classificationStatus:
+      | "PENDING"
+      | "CLASSIFIED"
+      | "REVIEW_REQUIRED"
+      | "REJECTED";
+  } | null;
+};
+
+export default function DashboardPage() {
+  const [receipts, setReceipts] = useState<Receipt[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  async function loadReceipts() {
+    try {
+        setLoading(true);
+        setError("");
+
+        console.log("Fetching receipts...");
+
+        const response = await fetch("/api/receipts", {
+        method: "GET",
+        cache: "no-store",
+        });
+
+        console.log("Receipt API status:", response.status);
+
+        if (!response.ok) {
+        throw new Error(`Receipt API returned ${response.status}`);
+        }
+
+        const result = await response.json();
+
+        console.log("Receipt API response:", result);
+
+        if (!Array.isArray(result.data)) {
+        throw new Error("Invalid receipt API response");
+        }
+
+        setReceipts(result.data);
+    } catch (err) {
+        console.error("Failed to load receipts:", err);
+
+        setError(
+        err instanceof Error
+            ? err.message
+            : "Unable to load receipts",
+        );
+    } finally {
+        setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    loadReceipts();
+  }, []);
+
+  const stats = useMemo(
+    () => ({
+      total: receipts.length,
+      pending: receipts.filter(
+        (receipt) =>
+          receipt.status === "PENDING" ||
+          receipt.status === "PROCESSING",
+      ).length,
+      review: receipts.filter(
+        (receipt) => receipt.status === "REVIEW_REQUIRED",
+      ).length,
+      completed: receipts.filter(
+        (receipt) => receipt.status === "COMPLETED",
+      ).length,
+    }),
+    [receipts],
+  );
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert h-5 w-[100px]"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the{" "}
-            <code className="rounded bg-black/[.06] px-1.5 py-0.5 font-mono text-[0.9em] dark:bg-white/[.08]">
-              page.tsx
-            </code>{" "}
-            file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+    <main className="min-h-screen bg-slate-50 text-slate-900">
+      <div className="mx-auto max-w-7xl px-6 py-8">
+        <header className="mb-8 flex items-center justify-between">
+          <div>
+            <p className="text-sm font-medium text-blue-600">
+              LoopNow
+            </p>
+
+            <h1 className="mt-1 text-3xl font-bold tracking-tight">
+              CPA Copilot
+            </h1>
+
+            <p className="mt-2 text-sm text-slate-500">
+              Receipt classification, compliance review and ITC workflow.
+            </p>
+          </div>
+
+          <button
+            onClick={loadReceipts}
+            className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium shadow-sm transition hover:bg-slate-50"
           >
-            <Image
-              className="dark:invert h-[14px] w-4"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={14}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
+            Refresh
+          </button>
+        </header>
+
+        <section className="mb-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <StatCard label="Total receipts" value={stats.total} />
+          <StatCard label="Pending" value={stats.pending} />
+          <StatCard label="Needs review" value={stats.review} />
+          <StatCard label="Completed" value={stats.completed} />
+        </section>
+
+        <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+          <div className="border-b border-slate-200 px-6 py-5">
+            <h2 className="text-lg font-semibold">Receipts</h2>
+            <p className="mt-1 text-sm text-slate-500">
+              Review and inspect processed receipts.
+            </p>
+          </div>
+
+          {loading && (
+            <div className="px-6 py-12 text-center text-sm text-slate-500">
+              Loading receipts...
+            </div>
+          )}
+
+          {!loading && error && (
+            <div className="px-6 py-12 text-center">
+              <p className="text-sm text-red-600">{error}</p>
+
+              <button
+                onClick={loadReceipts}
+                className="mt-4 rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white"
+              >
+                Try again
+              </button>
+            </div>
+          )}
+
+          {!loading && !error && receipts.length === 0 && (
+            <div className="px-6 py-12 text-center text-sm text-slate-500">
+              No receipts found.
+            </div>
+          )}
+
+          {!loading && !error && receipts.length > 0 && (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-sm">
+                <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+                  <tr>
+                    <th className="px-6 py-4 font-medium">Vendor</th>
+                    <th className="px-6 py-4 font-medium">Amount</th>
+                    <th className="px-6 py-4 font-medium">
+                      Classification
+                    </th>
+                    <th className="px-6 py-4 font-medium">GIFI</th>
+                    <th className="px-6 py-4 font-medium">ITC</th>
+                    <th className="px-6 py-4 font-medium">Status</th>
+                    <th className="px-6 py-4 font-medium" />
+                  </tr>
+                </thead>
+
+                <tbody className="divide-y divide-slate-100">
+                  {receipts.map((receipt) => (
+                    <tr
+                      key={receipt.id}
+                      className="transition hover:bg-slate-50"
+                    >
+                      <td className="px-6 py-5">
+                        <div className="font-medium">
+                          {receipt.vendor}
+                        </div>
+
+                        <div className="mt-1 text-xs text-slate-400">
+                          {new Date(receipt.createdAt).toLocaleDateString()}
+                        </div>
+                      </td>
+
+                      <td className="px-6 py-5 font-medium">
+                        ${Number(receipt.total).toFixed(2)}
+                      </td>
+
+                      <td className="px-6 py-5">
+                        {receipt.expense?.category ?? "—"}
+                      </td>
+
+                      <td className="px-6 py-5 font-mono text-xs">
+                        {receipt.expense?.gifiCode ?? "—"}
+                      </td>
+
+                      <td className="px-6 py-5">
+                        ${Number(receipt.expense?.eligibleItc ?? 0).toFixed(2)}
+                      </td>
+
+                      <td className="px-6 py-5">
+                        <StatusBadge status={receipt.status} />
+                      </td>
+
+                      <td className="px-6 py-5 text-right">
+                        <Link
+                          href={`/receipts/${receipt.id}`}
+                          className="font-medium text-blue-600 hover:text-blue-700"
+                        >
+                          View →
+                        </Link>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+      </div>
+    </main>
+  );
+}
+
+function StatCard({
+  label,
+  value,
+}: {
+  label: string;
+  value: number;
+}) {
+  return (
+    <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+      <p className="text-sm text-slate-500">{label}</p>
+      <p className="mt-2 text-3xl font-bold">{value}</p>
     </div>
+  );
+}
+
+function StatusBadge({
+  status,
+}: {
+  status: Receipt["status"];
+}) {
+  const styles: Record<Receipt["status"], string> = {
+    PENDING: "bg-amber-50 text-amber-700",
+    PROCESSING: "bg-blue-50 text-blue-700",
+    REVIEW_REQUIRED: "bg-orange-50 text-orange-700",
+    COMPLETED: "bg-emerald-50 text-emerald-700",
+    ERROR: "bg-red-50 text-red-700",
+  };
+
+  return (
+    <span
+      className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${styles[status]}`}
+    >
+      {status.replace("_", " ")}
+    </span>
   );
 }

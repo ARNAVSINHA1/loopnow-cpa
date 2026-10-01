@@ -1,0 +1,21 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: loopnow-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: loopnow
+      POSTGRES_PASSWORD: loopnow_dev_password
+      POSTGRES_DB: loopnow_cpa
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U loopnow -d loopnow_cpa"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data:
