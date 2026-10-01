@@ -1,6 +1,5 @@
 import { prisma } from "@/server/db";
-import { executeTool } from "@/server/tools/executor";
-import { getMealITCPercentage } from "../domain/cra/meals-rules";
+import { runReceiptAgent } from "@/server/agent/receipt-agent";
 import {
   createAgentRun,
   completeAgentRun,
@@ -10,78 +9,10 @@ import {
 const RULE_VERSION = "CRA-PROTOTYPE-v1";
 const MODEL = "cpa-copilot-v1";
 
-function verifyResult(input: {
-  taxAmount: number;
-  eligibilityPercentage: number;
-  eligibleItc: number;
-  gifiCode: string | null;
-  category: string;
-  documentationStatus: "sufficient" | "insufficient" | "review";
-}): {
-  valid: boolean;
-  reason: string;
-} {
-  if (input.gifiCode === null) {
-    return {
-      valid: false,
-      reason: "GIFI mapping is unresolved.",
-    };
-  }
-
-  if (input.category === "Unknown") {
-    return {
-      valid: false,
-      reason: "Expense classification is unresolved.",
-    };
-  }
-
-  /*
-   * When documentation is insufficient/review,
-   * the ITC engine intentionally returns zero.
-   * That is a valid deterministic outcome, not
-   * an arithmetic verification failure.
-   */
-  if (input.documentationStatus !== "sufficient") {
-    if (input.eligibleItc !== 0) {
-      return {
-        valid: false,
-        reason:
-          "ITC should be zero when documentation is insufficient or requires review.",
-      };
-    }
-
-    return {
-      valid: true,
-      reason:
-        "Documentation review correctly prevented ITC from being claimed.",
-    };
-  }
-
-  const expectedItc =
-    Math.round(
-      (input.taxAmount * input.eligibilityPercentage + Number.EPSILON) * 100,
-    ) / 100;
-
-  if (Math.abs(expectedItc - input.eligibleItc) > 0.01) {
-    return {
-      valid: false,
-      reason: "Eligible ITC failed deterministic arithmetic verification.",
-    };
-  }
-
-  return {
-    valid: true,
-    reason:
-      "Classification, GIFI mapping and ITC arithmetic passed verification.",
-  };
-}
-
 export async function processReceipt(receiptId: string) {
   return prisma.$transaction(async (tx) => {
     const receipt = await tx.receipt.findUnique({
-      where: {
-        id: receiptId,
-      },
+      where: { id: receiptId },
     });
 
     if (!receipt) {
@@ -94,29 +25,23 @@ export async function processReceipt(receiptId: string) {
           receiptId: receipt.id,
           status: "PENDING",
         },
-        orderBy: {
-          createdAt: "desc",
-        },
+        orderBy: { createdAt: "desc" },
       });
 
       if (existingApproval) {
         return {
           receiptId: receipt.id,
-          status: "REVIEW_REQUIRED",
+          status: "REVIEW_REQUIRED" as const,
           approvalId: existingApproval.id,
           message: "Receipt is already awaiting human review.",
         };
       }
     }
 
-    /*
-     * Idempotency:
-     * A completed receipt must not be processed again.
-     */
     if (receipt.status === "COMPLETED") {
       return {
         receiptId: receipt.id,
-        status: "COMPLETED",
+        status: "COMPLETED" as const,
         message: "Receipt has already been processed and approved.",
       };
     }
@@ -126,10 +51,13 @@ export async function processReceipt(receiptId: string) {
         receiptId: receipt.id,
         requestId: crypto.randomUUID(),
         provider: "internal",
-        model: MODEL,
+        model: "cpa-copilot-v1",
       },
       tx,
     );
+
+    const RULE_VERSION = "CRA-PROTOTYPE-v1";
+    const MODEL = "cpa-copilot-v1";
 
     try {
       await tx.auditEvent.create({
@@ -144,387 +72,21 @@ export async function processReceipt(receiptId: string) {
         },
       });
 
-      /*
-       * STEP 1: Validate receipt data
-       */
-      const currentReceiptTool = await executeTool(
-        "get_current_receipt",
-        {},
-        {
-          selectedReceiptId: receipt.id,
-          agentRunId: agentRun.id,
-          db: tx,
-        },
-      );
-
-      if (currentReceiptTool.status !== "SUCCESS") {
-        throw new Error(
-          `Failed to load selected receipt: ${JSON.stringify(
-            currentReceiptTool.output,
-          )}`,
-        );
-      }
-
-      /*
-       * STEP 2: GST/HST registration-number format validation
-       *
-       * This is deterministic format validation only.
-       * A valid format does NOT prove CRA registration.
-       */
-      const gstValidationTool = await executeTool(
-        "validate_gst_hst_number_format",
-        {
-          receiptId: receipt.id,
-          gstHstNumber: receipt.gstHstNumber,
-        },
-        {
-          selectedReceiptId: receipt.id,
-          agentRunId: agentRun.id,
-          db: tx,
-        },
-      );
-
-      if (gstValidationTool.status === "FAILURE" || !gstValidationTool.output) {
-        throw new Error("GST/HST validation tool failed.");
-      }
-
-      const gstHstValidation = gstValidationTool.output as {
-        status: "missing" | "invalid_format" | "valid_format" | "unavailable";
-        normalizedNumber: string | null;
-        reason: string;
-        externallyVerified: false;
-      };
-
-      /*
-       * STEP 3: CRA documentation evaluation
-       */
-      const documentationTool = await executeTool(
-        "validate_cra_documentation",
-        {
-          receiptId: receipt.id,
-          total: Number(receipt.total),
-          gstHstNumber: receipt.gstHstNumber,
-        },
-        {
-          selectedReceiptId: receipt.id,
-          agentRunId: agentRun.id,
-          db: tx,
-        },
-      );
-
-      if (documentationTool.status === "FAILURE" || !documentationTool.output) {
-        throw new Error("CRA documentation validation tool failed.");
-      }
-
-      const documentation = documentationTool.output as {
-        tier: 1 | 2 | 3;
-        status: "sufficient" | "insufficient" | "review";
-        reason: string;
-        gstHstValidation: {
-          status: "missing" | "invalid_format" | "valid_format" | "unavailable";
-          normalizedNumber: string | null;
-          reason: string;
-          externallyVerified: false;
-        };
-      };
-
-      /*
-       * STEP 4: Expense classification
-       */
-      const classificationTool = await executeTool(
-        "classify_expense",
-        {
-          receiptId: receipt.id,
-          vendor: receipt.vendor,
-          description: receipt.description,
-        },
-        {
-          selectedReceiptId: receipt.id,
-          agentRunId: agentRun.id,
-          db: tx,
-        },
-      );
-
-      if (
-        classificationTool.status === "FAILURE" ||
-        !classificationTool.output
-      ) {
-        throw new Error("Expense classification tool failed.");
-      }
-
-      const classification = classificationTool.output as {
-        category: string;
-        gifiCode: string | null;
-        confidence: number;
-        reason: string;
-        mealException?:
-          "standard" | "charityOrPublicInstitution" | "longHaulTruckDriver";
-      };
-
-      /*
-       * STEP 5: GIFI mapping
-       */
-      const gifiTool = await executeTool(
-        "assign_gifi_code",
-        {
-          receiptId: receipt.id,
-          category: classification.category,
-          proposedCode: classification.gifiCode,
-        },
-        {
-          selectedReceiptId: receipt.id,
-          agentRunId: agentRun.id,
-          db: tx,
-        },
-      );
-
-      if (gifiTool.status === "FAILURE" || !gifiTool.output) {
-        throw new Error("GIFI assignment tool failed.");
-      }
-
-      const gifiResult = gifiTool.output as {
-        status: "SUCCESS" | "REVIEW_REQUIRED";
-        receiptId: string;
-        category: string;
-        gifiCode: string | null;
-        description?: string;
-        confidence?: number;
-        source?: string;
-        reason: string;
-      };
-
-      const gifi =
-        gifiResult.status === "SUCCESS" && gifiResult.gifiCode
-          ? {
-              code: gifiResult.gifiCode,
-              description: gifiResult.description ?? "",
-              category: gifiResult.category,
-              confidence: gifiResult.confidence ?? 0,
-              source: gifiResult.source ?? "",
-            }
-          : null;
-
-      /*
-       * STEP 6: Determine eligibility percentage
-       *
-       * For this prototype, commercial use defaults to 100%.
-       * If the receipt explicitly contains a commercial-use percentage,
-       * that value is used.
-       */
-      const commercialUsePercentage =
-        receipt.commercialUsePercentage !== null &&
-        receipt.commercialUsePercentage !== undefined
-          ? Number(receipt.commercialUsePercentage) / 100
-          : 1;
-
-      let eligibilityPercentage = commercialUsePercentage;
-
-      if (classification.category === "Meals and Entertainment") {
-        const mealPercentage = getMealITCPercentage(
-          classification.mealException ?? "standard",
-        );
-
-        eligibilityPercentage = commercialUsePercentage * mealPercentage;
-      }
-
-      /*
-       * STEP 7: Deterministic ITC calculation
-       */
-      const classificationRequiresReview =
-        classification.category === "Unknown" ||
-        classification.gifiCode === null ||
-        gifi === null;
-
-      let itc;
-      let itcTool: Awaited<ReturnType<typeof executeTool>> | null = null;
-
-      if (classificationRequiresReview) {
-        itc = {
-          status: "review" as const,
-          receiptId: receipt.id,
-          grossTax: Number(receipt.taxAmount),
-          eligibilityPercentage,
-          eligibleITC: 0,
-          ruleApplied: "CLASSIFICATION_REVIEW",
-          documentation: {
-            status: documentation.status,
-          },
-          source: "CRA_RULE_ENGINE" as const,
-        };
-      } else {
-        itcTool = await executeTool(
-          "calculate_eligible_itc",
-          {
-            receiptId: receipt.id,
-            taxAmount: Number(receipt.taxAmount),
-            eligibilityPercentage,
-            documentationStatus: documentation.status,
-          },
-          {
-            selectedReceiptId: receipt.id,
-            agentRunId: agentRun.id,
-            db: tx,
-          },
-        );
-
-        if (itcTool.status === "FAILURE" || !itcTool.output) {
-          throw new Error("Eligible ITC calculation tool failed.");
-        }
-
-        itc = itcTool.output as {
-          status: "eligible" | "partial" | "ineligible" | "review";
-          receiptId: string;
-          grossTax: number;
-          eligibilityPercentage: number;
-          eligibleITC: number;
-          ruleApplied: string;
-          documentation: {
-            status: "sufficient" | "insufficient" | "review";
-          };
-          source: "CRA_RULE_ENGINE";
-        };
-      }
-
-      /*
-       * STEP 8: Self verification
-       */
-      const verification = verifyResult({
-        taxAmount: Number(receipt.taxAmount),
-        eligibilityPercentage,
-        eligibleItc: itc.eligibleITC,
-        gifiCode: gifi?.code ?? null,
-        category: classification.category,
-        documentationStatus: documentation.status,
+      const result = await runReceiptAgent({
+        receiptId: receipt.id,
+        agentRunId: agentRun.id,
+        db: tx,
       });
 
-      await tx.toolCall.create({
-        data: {
-          agentRunId: agentRun.id,
-          toolName: "self_verification",
-          input: {
-            receiptId: receipt.id,
-            category: classification.category,
-            gifiCode: gifi?.code ?? null,
-            eligibleItc: itc.eligibleITC,
-          },
-          output: verification,
-          status: "SUCCESS",
-          completedAt: new Date(),
-        },
-      });
-
-      /*
-       * STEP 9: Decide final workflow status
-       */
-      const requiresReview =
-        !verification.valid ||
-        documentation.status !== "sufficient" ||
-        classification.gifiCode === null ||
-        itc.status === "review";
-
-      const finalReceiptStatus = requiresReview
-        ? "REVIEW_REQUIRED"
-        : "COMPLETED";
-
-      const classificationStatus = requiresReview
-        ? "REVIEW_REQUIRED"
-        : "CLASSIFIED";
-
-      /*
-       * STEP 10: Persist Expense Classification
-       *
-       * All expense financial state is persisted through
-       * the explicit workflow tool.
-       */
-      const expenseItcStatus =
-        itc.status === "eligible"
-          ? "ELIGIBLE"
-          : itc.status === "partial"
-            ? "PARTIAL"
-            : itc.status === "ineligible"
-              ? "INELIGIBLE"
-              : "REVIEW";
-
-      const updateClassificationTool = await executeTool(
-        "update_expense_classification",
-        {
-          receiptId: receipt.id,
-          category: classification.category,
-          gifiCode: gifi?.code ?? null,
-          commercialUsePercentage: commercialUsePercentage * 100,
-          grossTax: Number(receipt.taxAmount),
-          eligibilityPercentage,
-          eligibleItc: itc.eligibleITC,
-          itcStatus: expenseItcStatus,
-          classificationStatus,
-          confidence: classification.confidence,
-          reason: `${classification.reason} ${documentation.reason}`,
-        },
-        {
-          selectedReceiptId: receipt.id,
-          agentRunId: agentRun.id,
-          db: tx,
-        },
-      );
-
-      if (
-        updateClassificationTool.status === "FAILURE" ||
-        !updateClassificationTool.output
-      ) {
-        throw new Error("Expense classification update tool failed.");
-      }
-
-      /*
-       * STEP 11: Request human review when required
-       */
-      let humanReviewTool = null;
-
-      if (requiresReview) {
-        humanReviewTool = await executeTool(
-          "request_human_review",
-          {
-            receiptId: receipt.id,
-            agentRunId: agentRun.id,
-            proposedCategory: classification.category,
-            proposedGifiCode: gifi?.code ?? classification.gifiCode,
-            proposedItc: itc.eligibleITC,
-            reason: !verification.valid
-              ? verification.reason
-              : documentation.reason,
-          },
-          {
-            selectedReceiptId: receipt.id,
-            agentRunId: agentRun.id,
-            db: tx,
-          },
-        );
-
-        if (humanReviewTool.status === "FAILURE" || !humanReviewTool.output) {
-          throw new Error("Human review request failed.");
-        }
-      }
-
-      /*
-       * STEP 12: Persist final receipt status
-       *
-       * request_human_review already transitions review cases
-       * to REVIEW_REQUIRED. Only the successful path needs the
-       * explicit COMPLETED transition here.
-       */
-      if (!requiresReview) {
+      if (result.status === "COMPLETED") {
         await tx.receipt.update({
-          where: {
-            id: receipt.id,
-          },
+          where: { id: receipt.id },
           data: {
             status: "COMPLETED",
           },
         });
       }
 
-      /*
-       * STEP 13: Audit completion
-       */
       await tx.auditEvent.create({
         data: {
           actor: "system",
@@ -533,25 +95,17 @@ export async function processReceipt(receiptId: string) {
           action: "PROCESSING_COMPLETED",
           ruleVersion: RULE_VERSION,
           model: MODEL,
-          status: requiresReview ? "REVIEW_REQUIRED" : "SUCCESS",
+          status:
+            result.status === "REVIEW_REQUIRED" ? "REVIEW_REQUIRED" : "SUCCESS",
           metadata: {
-            validationToolCallId: gstValidationTool.toolCallId,
-            documentationToolCallId: documentationTool.toolCallId,
-            classificationToolCallId: classificationTool.toolCallId,
-            gifiToolCallId: gifiTool.toolCallId,
-            itcToolCallId: classificationRequiresReview
-              ? null
-              : (itcTool?.toolCallId ?? null),
-            updateClassificationToolCallId: updateClassificationTool.toolCallId,
-            humanReviewToolCallId: humanReviewTool?.toolCallId ?? null,
-            gstHstValidationStatus: gstHstValidation.status,
-            gstHstNumber: gstHstValidation.normalizedNumber,
-            classification: classification.category,
-            gifiCode: gifi?.code ?? null,
-            documentationStatus: documentation.status,
-            itcStatus: itc.status,
-            eligibleItc: itc.eligibleITC,
-            verificationPassed: verification.valid,
+            gstHstValidationStatus: result.gstHstValidationStatus,
+            classification: result.classification,
+            gifiCode: result.gifiCode,
+            documentationStatus: result.documentationStatus,
+            itcStatus: result.itcStatus,
+            eligibleItc: result.eligibleItc,
+            verificationPassed: result.verificationPassed,
+            requiresReview: result.requiresReview,
           },
         },
       });
@@ -559,22 +113,21 @@ export async function processReceipt(receiptId: string) {
       await completeAgentRun(agentRun.id, tx);
 
       return {
-        receiptId: receipt.id,
+        receiptId: result.receiptId,
         agentRunId: agentRun.id,
-        status: finalReceiptStatus,
-        classification: classification.category,
-        gifiCode: gifi?.code ?? null,
-        documentationStatus: documentation.status,
-        itcStatus: itc.status,
-        eligibleItc: itc.eligibleITC,
-        requiresReview,
+        status: result.status,
+        classification: result.classification,
+        gifiCode: result.gifiCode,
+        documentationStatus: result.documentationStatus,
+        itcStatus: result.itcStatus,
+        eligibleItc: result.eligibleItc,
+        requiresReview: result.requiresReview,
       };
     } catch (error) {
-      await failAgentRun(
-        agentRun.id,
-        error instanceof Error ? error.message : "Unknown processing error",
-        tx,
-      );
+      const message =
+        error instanceof Error ? error.message : "Unknown processing error.";
+
+      await failAgentRun(agentRun.id, message, tx);
 
       await tx.auditEvent.create({
         data: {
@@ -586,10 +139,7 @@ export async function processReceipt(receiptId: string) {
           model: MODEL,
           status: "FAILURE",
           metadata: {
-            error:
-              error instanceof Error
-                ? error.message
-                : "Unknown processing error",
+            error: message,
           },
         },
       });

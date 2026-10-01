@@ -44,6 +44,9 @@ describe("agent run lifecycle", () => {
         model: "cpa-copilot-v1",
         provider: "test",
         status: "RUNNING",
+        currentStep: "STARTING",
+        currentTool: null,
+        iteration: 0,
       },
     });
 
@@ -64,6 +67,8 @@ describe("agent run lifecycle", () => {
       },
       data: {
         status: "COMPLETED",
+        currentStep: "COMPLETED",
+        currentTool: null,
         completedAt: expect.any(Date),
         error: null,
       },
@@ -87,6 +92,8 @@ describe("agent run lifecycle", () => {
       },
       data: {
         status: "FAILED",
+        currentStep: "FAILED",
+        currentTool: null,
         completedAt: expect.any(Date),
         error: "Tool execution failed",
       },

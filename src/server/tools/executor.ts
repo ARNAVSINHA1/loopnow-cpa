@@ -1,5 +1,6 @@
 import prisma from "@/server/db/prisma";
 import type { DatabaseClient } from "@/server/db/types";
+import { updateAgentRunState } from "@/server/agent/agent-run";
 
 import {
   AssignGifiCodeInputSchema,
@@ -214,6 +215,21 @@ export async function executeTool(
   context: ToolExecutionContext,
 ): Promise<ToolExecutionResult> {
   const startedAt = Date.now();
+  const iteration = await context.db.toolCall.count({
+    where: {
+      agentRunId: context.agentRunId,
+    },
+  });
+
+  await updateAgentRunState(
+    context.agentRunId,
+    {
+      currentStep: "TOOL_EXECUTION",
+      currentTool: toolName,
+      iteration: iteration + 1,
+    },
+    context.db,
+  );
 
   const toolCall = await context.db.toolCall.create({
     data: {
@@ -241,6 +257,14 @@ export async function executeTool(
       },
     });
 
+    await updateAgentRunState(
+      context.agentRunId,
+      {
+        currentTool: null,
+      },
+      context.db,
+    );
+
     return {
       toolCallId: toolCall.id,
       toolName: result.toolName,
@@ -264,6 +288,15 @@ export async function executeTool(
         error: message,
       },
     });
+
+    await updateAgentRunState(
+      context.agentRunId,
+      {
+        currentTool: null,
+        currentStep: "FAILED",
+      },
+      context.db,
+    );
 
     throw error;
   }

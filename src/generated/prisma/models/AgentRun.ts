@@ -20,8 +20,18 @@ export type AgentRunModel =
 
 export type AggregateAgentRun = {
   _count: AgentRunCountAggregateOutputType | null;
+  _avg: AgentRunAvgAggregateOutputType | null;
+  _sum: AgentRunSumAggregateOutputType | null;
   _min: AgentRunMinAggregateOutputType | null;
   _max: AgentRunMaxAggregateOutputType | null;
+};
+
+export type AgentRunAvgAggregateOutputType = {
+  iteration: number | null;
+};
+
+export type AgentRunSumAggregateOutputType = {
+  iteration: number | null;
 };
 
 export type AgentRunMinAggregateOutputType = {
@@ -31,6 +41,9 @@ export type AgentRunMinAggregateOutputType = {
   model: string | null;
   provider: string | null;
   status: $Enums.AgentRunStatus | null;
+  currentStep: string | null;
+  currentTool: string | null;
+  iteration: number | null;
   startedAt: Date | null;
   completedAt: Date | null;
   error: string | null;
@@ -43,6 +56,9 @@ export type AgentRunMaxAggregateOutputType = {
   model: string | null;
   provider: string | null;
   status: $Enums.AgentRunStatus | null;
+  currentStep: string | null;
+  currentTool: string | null;
+  iteration: number | null;
   startedAt: Date | null;
   completedAt: Date | null;
   error: string | null;
@@ -55,10 +71,21 @@ export type AgentRunCountAggregateOutputType = {
   model: number;
   provider: number;
   status: number;
+  currentStep: number;
+  currentTool: number;
+  iteration: number;
   startedAt: number;
   completedAt: number;
   error: number;
   _all: number;
+};
+
+export type AgentRunAvgAggregateInputType = {
+  iteration?: true;
+};
+
+export type AgentRunSumAggregateInputType = {
+  iteration?: true;
 };
 
 export type AgentRunMinAggregateInputType = {
@@ -68,6 +95,9 @@ export type AgentRunMinAggregateInputType = {
   model?: true;
   provider?: true;
   status?: true;
+  currentStep?: true;
+  currentTool?: true;
+  iteration?: true;
   startedAt?: true;
   completedAt?: true;
   error?: true;
@@ -80,6 +110,9 @@ export type AgentRunMaxAggregateInputType = {
   model?: true;
   provider?: true;
   status?: true;
+  currentStep?: true;
+  currentTool?: true;
+  iteration?: true;
   startedAt?: true;
   completedAt?: true;
   error?: true;
@@ -92,6 +125,9 @@ export type AgentRunCountAggregateInputType = {
   model?: true;
   provider?: true;
   status?: true;
+  currentStep?: true;
+  currentTool?: true;
+  iteration?: true;
   startedAt?: true;
   completedAt?: true;
   error?: true;
@@ -141,6 +177,18 @@ export type AgentRunAggregateArgs<
   /**
    * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
    *
+   * Select which fields to average
+   **/
+  _avg?: AgentRunAvgAggregateInputType;
+  /**
+   * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
+   *
+   * Select which fields to sum
+   **/
+  _sum?: AgentRunSumAggregateInputType;
+  /**
+   * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
+   *
    * Select which fields to find the minimum value
    **/
   _min?: AgentRunMinAggregateInputType;
@@ -173,6 +221,8 @@ export type AgentRunGroupByArgs<
   take?: number;
   skip?: number;
   _count?: AgentRunCountAggregateInputType | true;
+  _avg?: AgentRunAvgAggregateInputType;
+  _sum?: AgentRunSumAggregateInputType;
   _min?: AgentRunMinAggregateInputType;
   _max?: AgentRunMaxAggregateInputType;
 };
@@ -184,10 +234,15 @@ export type AgentRunGroupByOutputType = {
   model: string | null;
   provider: string | null;
   status: $Enums.AgentRunStatus;
+  currentStep: string | null;
+  currentTool: string | null;
+  iteration: number;
   startedAt: Date;
   completedAt: Date | null;
   error: string | null;
   _count: AgentRunCountAggregateOutputType | null;
+  _avg: AgentRunAvgAggregateOutputType | null;
+  _sum: AgentRunSumAggregateOutputType | null;
   _min: AgentRunMinAggregateOutputType | null;
   _max: AgentRunMaxAggregateOutputType | null;
 };
@@ -215,6 +270,9 @@ export type AgentRunWhereInput = {
   model?: Prisma.StringNullableFilter<"AgentRun"> | string | null;
   provider?: Prisma.StringNullableFilter<"AgentRun"> | string | null;
   status?: Prisma.EnumAgentRunStatusFilter<"AgentRun"> | $Enums.AgentRunStatus;
+  currentStep?: Prisma.StringNullableFilter<"AgentRun"> | string | null;
+  currentTool?: Prisma.StringNullableFilter<"AgentRun"> | string | null;
+  iteration?: Prisma.IntFilter<"AgentRun"> | number;
   startedAt?: Prisma.DateTimeFilter<"AgentRun"> | Date | string;
   completedAt?:
     Prisma.DateTimeNullableFilter<"AgentRun"> | Date | string | null;
@@ -235,6 +293,9 @@ export type AgentRunOrderByWithRelationInput = {
   model?: Prisma.SortOrderInput | Prisma.SortOrder;
   provider?: Prisma.SortOrderInput | Prisma.SortOrder;
   status?: Prisma.SortOrder;
+  currentStep?: Prisma.SortOrderInput | Prisma.SortOrder;
+  currentTool?: Prisma.SortOrderInput | Prisma.SortOrder;
+  iteration?: Prisma.SortOrder;
   startedAt?: Prisma.SortOrder;
   completedAt?: Prisma.SortOrderInput | Prisma.SortOrder;
   error?: Prisma.SortOrderInput | Prisma.SortOrder;
@@ -256,6 +317,9 @@ export type AgentRunWhereUniqueInput = Prisma.AtLeast<
     provider?: Prisma.StringNullableFilter<"AgentRun"> | string | null;
     status?:
       Prisma.EnumAgentRunStatusFilter<"AgentRun"> | $Enums.AgentRunStatus;
+    currentStep?: Prisma.StringNullableFilter<"AgentRun"> | string | null;
+    currentTool?: Prisma.StringNullableFilter<"AgentRun"> | string | null;
+    iteration?: Prisma.IntFilter<"AgentRun"> | number;
     startedAt?: Prisma.DateTimeFilter<"AgentRun"> | Date | string;
     completedAt?:
       Prisma.DateTimeNullableFilter<"AgentRun"> | Date | string | null;
@@ -278,12 +342,17 @@ export type AgentRunOrderByWithAggregationInput = {
   model?: Prisma.SortOrderInput | Prisma.SortOrder;
   provider?: Prisma.SortOrderInput | Prisma.SortOrder;
   status?: Prisma.SortOrder;
+  currentStep?: Prisma.SortOrderInput | Prisma.SortOrder;
+  currentTool?: Prisma.SortOrderInput | Prisma.SortOrder;
+  iteration?: Prisma.SortOrder;
   startedAt?: Prisma.SortOrder;
   completedAt?: Prisma.SortOrderInput | Prisma.SortOrder;
   error?: Prisma.SortOrderInput | Prisma.SortOrder;
   _count?: Prisma.AgentRunCountOrderByAggregateInput;
+  _avg?: Prisma.AgentRunAvgOrderByAggregateInput;
   _max?: Prisma.AgentRunMaxOrderByAggregateInput;
   _min?: Prisma.AgentRunMinOrderByAggregateInput;
+  _sum?: Prisma.AgentRunSumOrderByAggregateInput;
 };
 
 export type AgentRunScalarWhereWithAggregatesInput = {
@@ -305,6 +374,11 @@ export type AgentRunScalarWhereWithAggregatesInput = {
   status?:
     | Prisma.EnumAgentRunStatusWithAggregatesFilter<"AgentRun">
     | $Enums.AgentRunStatus;
+  currentStep?:
+    Prisma.StringNullableWithAggregatesFilter<"AgentRun"> | string | null;
+  currentTool?:
+    Prisma.StringNullableWithAggregatesFilter<"AgentRun"> | string | null;
+  iteration?: Prisma.IntWithAggregatesFilter<"AgentRun"> | number;
   startedAt?: Prisma.DateTimeWithAggregatesFilter<"AgentRun"> | Date | string;
   completedAt?:
     | Prisma.DateTimeNullableWithAggregatesFilter<"AgentRun">
@@ -320,6 +394,9 @@ export type AgentRunCreateInput = {
   model?: string | null;
   provider?: string | null;
   status?: $Enums.AgentRunStatus;
+  currentStep?: string | null;
+  currentTool?: string | null;
+  iteration?: number;
   startedAt?: Date | string;
   completedAt?: Date | string | null;
   error?: string | null;
@@ -336,6 +413,9 @@ export type AgentRunUncheckedCreateInput = {
   model?: string | null;
   provider?: string | null;
   status?: $Enums.AgentRunStatus;
+  currentStep?: string | null;
+  currentTool?: string | null;
+  iteration?: number;
   startedAt?: Date | string;
   completedAt?: Date | string | null;
   error?: string | null;
@@ -351,6 +431,9 @@ export type AgentRunUpdateInput = {
   provider?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
   status?:
     Prisma.EnumAgentRunStatusFieldUpdateOperationsInput | $Enums.AgentRunStatus;
+  currentStep?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
+  currentTool?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
+  iteration?: Prisma.IntFieldUpdateOperationsInput | number;
   startedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
   completedAt?:
     Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null;
@@ -369,6 +452,9 @@ export type AgentRunUncheckedUpdateInput = {
   provider?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
   status?:
     Prisma.EnumAgentRunStatusFieldUpdateOperationsInput | $Enums.AgentRunStatus;
+  currentStep?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
+  currentTool?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
+  iteration?: Prisma.IntFieldUpdateOperationsInput | number;
   startedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
   completedAt?:
     Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null;
@@ -385,6 +471,9 @@ export type AgentRunCreateManyInput = {
   model?: string | null;
   provider?: string | null;
   status?: $Enums.AgentRunStatus;
+  currentStep?: string | null;
+  currentTool?: string | null;
+  iteration?: number;
   startedAt?: Date | string;
   completedAt?: Date | string | null;
   error?: string | null;
@@ -397,6 +486,9 @@ export type AgentRunUpdateManyMutationInput = {
   provider?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
   status?:
     Prisma.EnumAgentRunStatusFieldUpdateOperationsInput | $Enums.AgentRunStatus;
+  currentStep?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
+  currentTool?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
+  iteration?: Prisma.IntFieldUpdateOperationsInput | number;
   startedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
   completedAt?:
     Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null;
@@ -411,6 +503,9 @@ export type AgentRunUncheckedUpdateManyInput = {
   provider?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
   status?:
     Prisma.EnumAgentRunStatusFieldUpdateOperationsInput | $Enums.AgentRunStatus;
+  currentStep?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
+  currentTool?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
+  iteration?: Prisma.IntFieldUpdateOperationsInput | number;
   startedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
   completedAt?:
     Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null;
@@ -434,9 +529,16 @@ export type AgentRunCountOrderByAggregateInput = {
   model?: Prisma.SortOrder;
   provider?: Prisma.SortOrder;
   status?: Prisma.SortOrder;
+  currentStep?: Prisma.SortOrder;
+  currentTool?: Prisma.SortOrder;
+  iteration?: Prisma.SortOrder;
   startedAt?: Prisma.SortOrder;
   completedAt?: Prisma.SortOrder;
   error?: Prisma.SortOrder;
+};
+
+export type AgentRunAvgOrderByAggregateInput = {
+  iteration?: Prisma.SortOrder;
 };
 
 export type AgentRunMaxOrderByAggregateInput = {
@@ -446,6 +548,9 @@ export type AgentRunMaxOrderByAggregateInput = {
   model?: Prisma.SortOrder;
   provider?: Prisma.SortOrder;
   status?: Prisma.SortOrder;
+  currentStep?: Prisma.SortOrder;
+  currentTool?: Prisma.SortOrder;
+  iteration?: Prisma.SortOrder;
   startedAt?: Prisma.SortOrder;
   completedAt?: Prisma.SortOrder;
   error?: Prisma.SortOrder;
@@ -458,9 +563,16 @@ export type AgentRunMinOrderByAggregateInput = {
   model?: Prisma.SortOrder;
   provider?: Prisma.SortOrder;
   status?: Prisma.SortOrder;
+  currentStep?: Prisma.SortOrder;
+  currentTool?: Prisma.SortOrder;
+  iteration?: Prisma.SortOrder;
   startedAt?: Prisma.SortOrder;
   completedAt?: Prisma.SortOrder;
   error?: Prisma.SortOrder;
+};
+
+export type AgentRunSumOrderByAggregateInput = {
+  iteration?: Prisma.SortOrder;
 };
 
 export type AgentRunScalarRelationFilter = {
@@ -567,6 +679,14 @@ export type EnumAgentRunStatusFieldUpdateOperationsInput = {
   set?: $Enums.AgentRunStatus;
 };
 
+export type IntFieldUpdateOperationsInput = {
+  set?: number;
+  increment?: number;
+  decrement?: number;
+  multiply?: number;
+  divide?: number;
+};
+
 export type AgentRunCreateNestedOneWithoutToolCallsInput = {
   create?: Prisma.XOR<
     Prisma.AgentRunCreateWithoutToolCallsInput,
@@ -655,6 +775,9 @@ export type AgentRunCreateWithoutReceiptInput = {
   model?: string | null;
   provider?: string | null;
   status?: $Enums.AgentRunStatus;
+  currentStep?: string | null;
+  currentTool?: string | null;
+  iteration?: number;
   startedAt?: Date | string;
   completedAt?: Date | string | null;
   error?: string | null;
@@ -669,6 +792,9 @@ export type AgentRunUncheckedCreateWithoutReceiptInput = {
   model?: string | null;
   provider?: string | null;
   status?: $Enums.AgentRunStatus;
+  currentStep?: string | null;
+  currentTool?: string | null;
+  iteration?: number;
   startedAt?: Date | string;
   completedAt?: Date | string | null;
   error?: string | null;
@@ -730,6 +856,9 @@ export type AgentRunScalarWhereInput = {
   model?: Prisma.StringNullableFilter<"AgentRun"> | string | null;
   provider?: Prisma.StringNullableFilter<"AgentRun"> | string | null;
   status?: Prisma.EnumAgentRunStatusFilter<"AgentRun"> | $Enums.AgentRunStatus;
+  currentStep?: Prisma.StringNullableFilter<"AgentRun"> | string | null;
+  currentTool?: Prisma.StringNullableFilter<"AgentRun"> | string | null;
+  iteration?: Prisma.IntFilter<"AgentRun"> | number;
   startedAt?: Prisma.DateTimeFilter<"AgentRun"> | Date | string;
   completedAt?:
     Prisma.DateTimeNullableFilter<"AgentRun"> | Date | string | null;
@@ -742,6 +871,9 @@ export type AgentRunCreateWithoutToolCallsInput = {
   model?: string | null;
   provider?: string | null;
   status?: $Enums.AgentRunStatus;
+  currentStep?: string | null;
+  currentTool?: string | null;
+  iteration?: number;
   startedAt?: Date | string;
   completedAt?: Date | string | null;
   error?: string | null;
@@ -757,6 +889,9 @@ export type AgentRunUncheckedCreateWithoutToolCallsInput = {
   model?: string | null;
   provider?: string | null;
   status?: $Enums.AgentRunStatus;
+  currentStep?: string | null;
+  currentTool?: string | null;
+  iteration?: number;
   startedAt?: Date | string;
   completedAt?: Date | string | null;
   error?: string | null;
@@ -799,6 +934,9 @@ export type AgentRunUpdateWithoutToolCallsInput = {
   provider?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
   status?:
     Prisma.EnumAgentRunStatusFieldUpdateOperationsInput | $Enums.AgentRunStatus;
+  currentStep?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
+  currentTool?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
+  iteration?: Prisma.IntFieldUpdateOperationsInput | number;
   startedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
   completedAt?:
     Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null;
@@ -816,6 +954,9 @@ export type AgentRunUncheckedUpdateWithoutToolCallsInput = {
   provider?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
   status?:
     Prisma.EnumAgentRunStatusFieldUpdateOperationsInput | $Enums.AgentRunStatus;
+  currentStep?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
+  currentTool?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
+  iteration?: Prisma.IntFieldUpdateOperationsInput | number;
   startedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
   completedAt?:
     Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null;
@@ -830,6 +971,9 @@ export type AgentRunCreateWithoutAuditEventsInput = {
   model?: string | null;
   provider?: string | null;
   status?: $Enums.AgentRunStatus;
+  currentStep?: string | null;
+  currentTool?: string | null;
+  iteration?: number;
   startedAt?: Date | string;
   completedAt?: Date | string | null;
   error?: string | null;
@@ -845,6 +989,9 @@ export type AgentRunUncheckedCreateWithoutAuditEventsInput = {
   model?: string | null;
   provider?: string | null;
   status?: $Enums.AgentRunStatus;
+  currentStep?: string | null;
+  currentTool?: string | null;
+  iteration?: number;
   startedAt?: Date | string;
   completedAt?: Date | string | null;
   error?: string | null;
@@ -887,6 +1034,9 @@ export type AgentRunUpdateWithoutAuditEventsInput = {
   provider?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
   status?:
     Prisma.EnumAgentRunStatusFieldUpdateOperationsInput | $Enums.AgentRunStatus;
+  currentStep?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
+  currentTool?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
+  iteration?: Prisma.IntFieldUpdateOperationsInput | number;
   startedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
   completedAt?:
     Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null;
@@ -904,6 +1054,9 @@ export type AgentRunUncheckedUpdateWithoutAuditEventsInput = {
   provider?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
   status?:
     Prisma.EnumAgentRunStatusFieldUpdateOperationsInput | $Enums.AgentRunStatus;
+  currentStep?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
+  currentTool?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
+  iteration?: Prisma.IntFieldUpdateOperationsInput | number;
   startedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
   completedAt?:
     Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null;
@@ -918,6 +1071,9 @@ export type AgentRunCreateWithoutApprovalsInput = {
   model?: string | null;
   provider?: string | null;
   status?: $Enums.AgentRunStatus;
+  currentStep?: string | null;
+  currentTool?: string | null;
+  iteration?: number;
   startedAt?: Date | string;
   completedAt?: Date | string | null;
   error?: string | null;
@@ -933,6 +1089,9 @@ export type AgentRunUncheckedCreateWithoutApprovalsInput = {
   model?: string | null;
   provider?: string | null;
   status?: $Enums.AgentRunStatus;
+  currentStep?: string | null;
+  currentTool?: string | null;
+  iteration?: number;
   startedAt?: Date | string;
   completedAt?: Date | string | null;
   error?: string | null;
@@ -975,6 +1134,9 @@ export type AgentRunUpdateWithoutApprovalsInput = {
   provider?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
   status?:
     Prisma.EnumAgentRunStatusFieldUpdateOperationsInput | $Enums.AgentRunStatus;
+  currentStep?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
+  currentTool?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
+  iteration?: Prisma.IntFieldUpdateOperationsInput | number;
   startedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
   completedAt?:
     Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null;
@@ -992,6 +1154,9 @@ export type AgentRunUncheckedUpdateWithoutApprovalsInput = {
   provider?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
   status?:
     Prisma.EnumAgentRunStatusFieldUpdateOperationsInput | $Enums.AgentRunStatus;
+  currentStep?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
+  currentTool?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
+  iteration?: Prisma.IntFieldUpdateOperationsInput | number;
   startedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
   completedAt?:
     Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null;
@@ -1006,6 +1171,9 @@ export type AgentRunCreateManyReceiptInput = {
   model?: string | null;
   provider?: string | null;
   status?: $Enums.AgentRunStatus;
+  currentStep?: string | null;
+  currentTool?: string | null;
+  iteration?: number;
   startedAt?: Date | string;
   completedAt?: Date | string | null;
   error?: string | null;
@@ -1018,6 +1186,9 @@ export type AgentRunUpdateWithoutReceiptInput = {
   provider?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
   status?:
     Prisma.EnumAgentRunStatusFieldUpdateOperationsInput | $Enums.AgentRunStatus;
+  currentStep?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
+  currentTool?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
+  iteration?: Prisma.IntFieldUpdateOperationsInput | number;
   startedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
   completedAt?:
     Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null;
@@ -1034,6 +1205,9 @@ export type AgentRunUncheckedUpdateWithoutReceiptInput = {
   provider?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
   status?:
     Prisma.EnumAgentRunStatusFieldUpdateOperationsInput | $Enums.AgentRunStatus;
+  currentStep?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
+  currentTool?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
+  iteration?: Prisma.IntFieldUpdateOperationsInput | number;
   startedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
   completedAt?:
     Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null;
@@ -1050,6 +1224,9 @@ export type AgentRunUncheckedUpdateManyWithoutReceiptInput = {
   provider?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
   status?:
     Prisma.EnumAgentRunStatusFieldUpdateOperationsInput | $Enums.AgentRunStatus;
+  currentStep?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
+  currentTool?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
+  iteration?: Prisma.IntFieldUpdateOperationsInput | number;
   startedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
   completedAt?:
     Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null;
@@ -1129,6 +1306,9 @@ export type AgentRunSelect<
     model?: boolean;
     provider?: boolean;
     status?: boolean;
+    currentStep?: boolean;
+    currentTool?: boolean;
+    iteration?: boolean;
     startedAt?: boolean;
     completedAt?: boolean;
     error?: boolean;
@@ -1152,6 +1332,9 @@ export type AgentRunSelectCreateManyAndReturn<
     model?: boolean;
     provider?: boolean;
     status?: boolean;
+    currentStep?: boolean;
+    currentTool?: boolean;
+    iteration?: boolean;
     startedAt?: boolean;
     completedAt?: boolean;
     error?: boolean;
@@ -1171,6 +1354,9 @@ export type AgentRunSelectUpdateManyAndReturn<
     model?: boolean;
     provider?: boolean;
     status?: boolean;
+    currentStep?: boolean;
+    currentTool?: boolean;
+    iteration?: boolean;
     startedAt?: boolean;
     completedAt?: boolean;
     error?: boolean;
@@ -1186,6 +1372,9 @@ export type AgentRunSelectScalar = {
   model?: boolean;
   provider?: boolean;
   status?: boolean;
+  currentStep?: boolean;
+  currentTool?: boolean;
+  iteration?: boolean;
   startedAt?: boolean;
   completedAt?: boolean;
   error?: boolean;
@@ -1201,6 +1390,9 @@ export type AgentRunOmit<
   | "model"
   | "provider"
   | "status"
+  | "currentStep"
+  | "currentTool"
+  | "iteration"
   | "startedAt"
   | "completedAt"
   | "error",
@@ -1248,6 +1440,9 @@ export type $AgentRunPayload<
       model: string | null;
       provider: string | null;
       status: $Enums.AgentRunStatus;
+      currentStep: string | null;
+      currentTool: string | null;
+      iteration: number;
       startedAt: Date;
       completedAt: Date | null;
       error: string | null;
@@ -1889,6 +2084,9 @@ export interface AgentRunFieldRefs {
   readonly model: Prisma.FieldRef<"AgentRun", "String">;
   readonly provider: Prisma.FieldRef<"AgentRun", "String">;
   readonly status: Prisma.FieldRef<"AgentRun", "AgentRunStatus">;
+  readonly currentStep: Prisma.FieldRef<"AgentRun", "String">;
+  readonly currentTool: Prisma.FieldRef<"AgentRun", "String">;
+  readonly iteration: Prisma.FieldRef<"AgentRun", "Int">;
   readonly startedAt: Prisma.FieldRef<"AgentRun", "DateTime">;
   readonly completedAt: Prisma.FieldRef<"AgentRun", "DateTime">;
   readonly error: Prisma.FieldRef<"AgentRun", "String">;

@@ -153,28 +153,6 @@ export async function getProcessingStatus(
     where: {
       id: parsed.receiptId,
     },
-    include: {
-      agentRuns: {
-        orderBy: {
-          startedAt: "desc",
-        },
-        take: 1,
-        include: {
-          toolCalls: {
-            orderBy: {
-              startedAt: "desc",
-            },
-            take: 1,
-          },
-        },
-      },
-      approvals: {
-        where: {
-          status: "PENDING",
-        },
-        take: 1,
-      },
-    },
   });
 
   if (!receipt) {
@@ -183,6 +161,9 @@ export async function getProcessingStatus(
       receiptId: parsed.receiptId,
       receiptStatus: null,
       agentRunStatus: null,
+      currentStep: null,
+      currentTool: null,
+      iteration: null,
       latestTool: null,
       latestToolStatus: null,
       pendingApproval: false,
@@ -190,19 +171,49 @@ export async function getProcessingStatus(
     });
   }
 
-  const latestRun = receipt.agentRuns[0];
-  const latestTool = latestRun?.toolCalls[0];
+  const agentRun = await db.agentRun.findFirst({
+    where: {
+      receiptId: parsed.receiptId,
+    },
+    orderBy: {
+      startedAt: "desc",
+    },
+  });
+
+  const latestToolCall = agentRun
+    ? await db.toolCall.findFirst({
+        where: {
+          agentRunId: agentRun.id,
+        },
+        orderBy: {
+          startedAt: "desc",
+        },
+      })
+    : null;
+
+  const pendingApproval = await db.approval.findFirst({
+    where: {
+      receiptId: parsed.receiptId,
+      status: "PENDING",
+    },
+  });
 
   return ProcessingStatusResultSchema.parse({
     status: "SUCCESS",
-    receiptId: receipt.id,
+    receiptId: parsed.receiptId,
     receiptStatus: receipt.status,
-    agentRunStatus: latestRun?.status ?? null,
-    latestTool: latestTool?.toolName ?? null,
-    latestToolStatus: latestTool?.status ?? null,
-    pendingApproval: receipt.approvals.length > 0,
-    message: receipt.approvals.length
-      ? "Receipt is awaiting human review."
-      : `Receipt status is ${receipt.status}.`,
+    agentRunStatus: agentRun?.status ?? null,
+    currentStep: agentRun?.currentStep ?? null,
+    currentTool: agentRun?.currentTool ?? null,
+    iteration: agentRun?.iteration ?? null,
+    latestTool: latestToolCall?.toolName ?? null,
+    latestToolStatus: latestToolCall?.status ?? null,
+    pendingApproval: Boolean(pendingApproval),
+    message:
+      receipt.status === "REVIEW_REQUIRED"
+        ? "Receipt is awaiting human review."
+        : receipt.status === "COMPLETED"
+          ? "Receipt processing is complete."
+          : "Receipt processing is in progress.",
   });
 }

@@ -63,21 +63,33 @@ type Receipt = {
   auditEvents: AuditEvent[];
 };
 
+type ProcessingStatus = {
+  status: "SUCCESS" | "FAILURE";
+  receiptId: string;
+  receiptStatus: string | null;
+  agentRunStatus: string | null;
+  currentStep: string | null;
+  currentTool: string | null;
+  iteration: number | null;
+  latestTool: string | null;
+  latestToolStatus: string | null;
+  pendingApproval: boolean;
+  message: string;
+};
+
 export default function ReceiptDetailsPage() {
   const params = useParams<{ id: string }>();
+  const receiptId = params.id;
 
   const [receipt, setReceipt] = useState<Receipt | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [processing, setProcessing] = useState(false);
-
-  const receiptId = params.id;
+  const [processingStatus, setProcessingStatus] =
+    useState<ProcessingStatus | null>(null);
 
   async function loadReceipt() {
     try {
-      setLoading(true);
-      setError("");
-
       const response = await fetch(`/api/receipts/${receiptId}`, {
         cache: "no-store",
       });
@@ -93,40 +105,66 @@ export default function ReceiptDetailsPage() {
       const result = await response.json();
 
       setReceipt(result.data);
+
+      return result.data as Receipt;
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to load receipt");
-    } finally {
-      setLoading(false);
+      return null;
+    }
+  }
+
+  async function loadProcessingStatus() {
+    try {
+      const response = await fetch(
+        `/api/receipts/${receiptId}/processing-status`,
+        {
+          cache: "no-store",
+        },
+      );
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(
+          result.data?.message ??
+            result.error ??
+            "Failed to load processing status",
+        );
+      }
+
+      setProcessingStatus(result.data);
+
+      return result.data as ProcessingStatus;
+    } catch (err) {
+      console.error("Failed to load processing status:", err);
+      return null;
     }
   }
 
   useEffect(() => {
+    if (!receiptId) {
+      return;
+    }
+
     let cancelled = false;
 
-    async function loadInitialReceipt() {
+    async function loadInitialData() {
       try {
-        const response = await fetch(`/api/receipts/${receiptId}`, {
-          cache: "no-store",
-        });
+        const [receiptResult, statusResult] = await Promise.all([
+          loadReceipt(),
+          loadProcessingStatus(),
+        ]);
 
-        if (!response.ok) {
-          if (response.status === 404) {
-            throw new Error("Receipt not found");
-          }
-
-          throw new Error("Failed to load receipt");
+        if (cancelled) {
+          return;
         }
 
-        const result = await response.json();
-
-        if (!cancelled) {
-          setReceipt(result.data);
+        if (receiptResult) {
+          setReceipt(receiptResult);
         }
-      } catch (err) {
-        if (!cancelled) {
-          setError(
-            err instanceof Error ? err.message : "Unable to load receipt",
-          );
+
+        if (statusResult) {
+          setProcessingStatus(statusResult);
         }
       } finally {
         if (!cancelled) {
@@ -135,19 +173,53 @@ export default function ReceiptDetailsPage() {
       }
     }
 
-    if (receiptId) {
-      loadInitialReceipt();
-    }
+    loadInitialData();
 
     return () => {
       cancelled = true;
     };
   }, [receiptId]);
 
+  useEffect(() => {
+    if (!receiptId) {
+      return;
+    }
+
+    const isRunning =
+      processingStatus?.agentRunStatus === "RUNNING" ||
+      receipt?.status === "PROCESSING";
+
+    if (!isRunning) {
+      return;
+    }
+
+    const interval = window.setInterval(async () => {
+      await Promise.all([loadProcessingStatus(), loadReceipt()]);
+    }, 1000);
+
+    return () => {
+      window.clearInterval(interval);
+    };
+  }, [receiptId, processingStatus?.agentRunStatus, receipt?.status]);
+
   async function processReceipt() {
     try {
       setProcessing(true);
       setError("");
+
+      setProcessingStatus({
+        status: "SUCCESS",
+        receiptId,
+        receiptStatus: "PROCESSING",
+        agentRunStatus: "RUNNING",
+        currentStep: "STARTING",
+        currentTool: null,
+        iteration: 0,
+        latestTool: null,
+        latestToolStatus: null,
+        pendingApproval: false,
+        message: "Receipt processing has started.",
+      });
 
       const response = await fetch(`/api/receipts/${receiptId}/process`, {
         method: "POST",
@@ -159,11 +231,13 @@ export default function ReceiptDetailsPage() {
         throw new Error(result.error ?? "Unable to process receipt");
       }
 
-      await loadReceipt();
+      await Promise.all([loadReceipt(), loadProcessingStatus()]);
     } catch (err) {
       setError(
         err instanceof Error ? err.message : "Unable to process receipt",
       );
+
+      await loadProcessingStatus();
     } finally {
       setProcessing(false);
     }
@@ -183,7 +257,10 @@ export default function ReceiptDetailsPage() {
     return (
       <main className="min-h-screen bg-slate-50 px-6 py-10">
         <div className="mx-auto max-w-6xl">
-          <Link href="/" className="text-sm font-medium text-blue-600">
+          <Link
+            href="/"
+            className="text-sm font-medium text-blue-600 hover:text-blue-700"
+          >
             ← Back to dashboard
           </Link>
 
@@ -204,9 +281,15 @@ export default function ReceiptDetailsPage() {
       ? receipt.approvals.find((approval) => approval.status === "PENDING")
       : undefined;
 
+  const isAgentRunning =
+    processingStatus?.agentRunStatus === "RUNNING" ||
+    receipt.status === "PROCESSING" ||
+    processing;
+
   return (
     <main className="min-h-screen bg-slate-50 text-slate-900">
       <div className="mx-auto max-w-6xl px-6 py-8">
+        {/* Back */}
         <div className="mb-6">
           <Link
             href="/"
@@ -216,6 +299,7 @@ export default function ReceiptDetailsPage() {
           </Link>
         </div>
 
+        {/* Error */}
         {error && (
           <div className="mb-6 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
             {error}
@@ -241,7 +325,8 @@ export default function ReceiptDetailsPage() {
               <StatusBadge status={receipt.status} />
 
               {receipt.status !== "COMPLETED" &&
-                receipt.status !== "PROCESSING" && (
+                receipt.status !== "PROCESSING" &&
+                !pendingApproval && (
                   <button
                     onClick={processReceipt}
                     disabled={processing}
@@ -254,7 +339,98 @@ export default function ReceiptDetailsPage() {
           </div>
         </section>
 
-        {/* Receipt + classification */}
+        {/* Agent Execution */}
+        {processingStatus && (
+          <section className="mb-6 rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+            <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-start">
+              <div>
+                <div className="flex items-center gap-3">
+                  <h2 className="text-lg font-semibold">Agent Execution</h2>
+
+                  {isAgentRunning && (
+                    <span className="inline-flex items-center gap-2 rounded-full bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-700">
+                      <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-blue-500" />
+                      Running
+                    </span>
+                  )}
+                </div>
+
+                <p className="mt-1 text-sm text-slate-500">
+                  Live processing state from the receipt agent.
+                </p>
+              </div>
+
+              <span className="rounded-full bg-slate-100 px-3 py-1.5 text-xs font-medium text-slate-700">
+                Iteration {processingStatus.iteration ?? 0}
+              </span>
+            </div>
+
+            <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              <ExecutionValue
+                label="Step"
+                value={
+                  processingStatus.currentStep
+                    ? formatStatus(processingStatus.currentStep)
+                    : "Idle"
+                }
+              />
+
+              <ExecutionValue
+                label="Current Tool"
+                value={
+                  processingStatus.currentTool
+                    ? formatStatus(processingStatus.currentTool)
+                    : "None"
+                }
+              />
+
+              <ExecutionValue
+                label="Latest Tool"
+                value={
+                  processingStatus.latestTool
+                    ? formatStatus(processingStatus.latestTool)
+                    : "None"
+                }
+              />
+
+              <ExecutionValue
+                label="Tool Status"
+                value={
+                  processingStatus.latestToolStatus
+                    ? formatStatus(processingStatus.latestToolStatus)
+                    : "None"
+                }
+              />
+            </div>
+
+            <div className="mt-5 rounded-lg border border-slate-100 bg-slate-50 p-4">
+              <div className="flex items-center gap-3">
+                {isAgentRunning ? (
+                  <span className="h-2.5 w-2.5 animate-pulse rounded-full bg-blue-500" />
+                ) : processingStatus.agentRunStatus === "FAILED" ? (
+                  <span className="h-2.5 w-2.5 rounded-full bg-red-500" />
+                ) : (
+                  <span className="h-2.5 w-2.5 rounded-full bg-emerald-500" />
+                )}
+
+                <p className="text-sm font-medium">
+                  {processingStatus.message}
+                </p>
+              </div>
+            </div>
+
+            {processingStatus.pendingApproval && (
+              <div className="mt-4 rounded-lg border border-orange-200 bg-orange-50 p-4">
+                <p className="text-sm font-medium text-orange-800">
+                  This receipt requires human review before processing can be
+                  completed.
+                </p>
+              </div>
+            )}
+          </section>
+        )}
+
+        {/* Receipt + Classification */}
         <div className="grid gap-6 lg:grid-cols-2">
           <Card title="Receipt Information">
             <InfoRow label="Vendor" value={receipt.vendor} />
@@ -289,8 +465,22 @@ export default function ReceiptDetailsPage() {
             />
 
             <InfoRow
+              label="Tax type"
+              value={receipt.taxType ?? "Not provided"}
+            />
+
+            <InfoRow
               label="GST/HST number"
               value={receipt.gstHstNumber ?? "Not provided"}
+            />
+
+            <InfoRow
+              label="Commercial use"
+              value={
+                receipt.commercialUsePercentage !== null
+                  ? `${Number(receipt.commercialUsePercentage).toFixed(0)}%`
+                  : "Not provided"
+              }
             />
           </Card>
 
@@ -329,9 +519,11 @@ export default function ReceiptDetailsPage() {
                 />
               </>
             ) : (
-              <p className="text-sm text-slate-500">
-                Expense classification has not been generated yet.
-              </p>
+              <div className="rounded-lg border border-slate-100 bg-slate-50 p-4">
+                <p className="text-sm text-slate-500">
+                  Expense classification has not been generated yet.
+                </p>
+              </div>
             )}
           </Card>
         </div>
@@ -381,9 +573,11 @@ export default function ReceiptDetailsPage() {
                 />
               </>
             ) : (
-              <p className="text-sm text-slate-500">
-                ITC calculation is not available yet.
-              </p>
+              <div className="rounded-lg border border-slate-100 bg-slate-50 p-4">
+                <p className="text-sm text-slate-500">
+                  ITC calculation is not available yet.
+                </p>
+              </div>
             )}
           </Card>
 
@@ -473,10 +667,11 @@ export default function ReceiptDetailsPage() {
           </Card>
         </div>
 
-        {/* Audit trail */}
+        {/* Audit Trail */}
         <section className="mt-6 rounded-xl border border-slate-200 bg-white shadow-sm">
           <div className="border-b border-slate-200 px-6 py-5">
             <h2 className="text-lg font-semibold">Audit Trail</h2>
+
             <p className="mt-1 text-sm text-slate-500">
               Recorded processing and review events for this receipt.
             </p>
@@ -545,6 +740,7 @@ function Card({
   return (
     <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
       <h2 className="mb-5 text-lg font-semibold">{title}</h2>
+
       {children}
     </section>
   );
@@ -577,6 +773,16 @@ function StatusBadge({ status }: { status: Receipt["status"] }) {
     >
       {formatStatus(status)}
     </span>
+  );
+}
+
+function ExecutionValue({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-lg border border-slate-100 bg-slate-50 p-4">
+      <p className="text-xs uppercase tracking-wide text-slate-400">{label}</p>
+
+      <p className="mt-2 text-sm font-semibold text-slate-900">{value}</p>
+    </div>
   );
 }
 

@@ -1285,6 +1285,9 @@ export const AgentRunScalarFieldEnum = {
   model: "model",
   provider: "provider",
   status: "status",
+  currentStep: "currentStep",
+  currentTool: "currentTool",
+  iteration: "iteration",
   startedAt: "startedAt",
   completedAt: "completedAt",
   error: "error",
@@ -1536,20 +1539,6 @@ export type ListEnumAgentRunStatusFieldRefInput<$PrismaModel> =
   FieldRefInputType<$PrismaModel, "AgentRunStatus[]">;
 
 /**
- * Reference to a field of type 'ToolCallStatus'
- */
-export type EnumToolCallStatusFieldRefInput<$PrismaModel> = FieldRefInputType<
-  $PrismaModel,
-  "ToolCallStatus"
->;
-
-/**
- * Reference to a field of type 'ToolCallStatus[]'
- */
-export type ListEnumToolCallStatusFieldRefInput<$PrismaModel> =
-  FieldRefInputType<$PrismaModel, "ToolCallStatus[]">;
-
-/**
  * Reference to a field of type 'Int'
  */
 export type IntFieldRefInput<$PrismaModel> = FieldRefInputType<
@@ -1564,6 +1553,20 @@ export type ListIntFieldRefInput<$PrismaModel> = FieldRefInputType<
   $PrismaModel,
   "Int[]"
 >;
+
+/**
+ * Reference to a field of type 'ToolCallStatus'
+ */
+export type EnumToolCallStatusFieldRefInput<$PrismaModel> = FieldRefInputType<
+  $PrismaModel,
+  "ToolCallStatus"
+>;
+
+/**
+ * Reference to a field of type 'ToolCallStatus[]'
+ */
+export type ListEnumToolCallStatusFieldRefInput<$PrismaModel> =
+  FieldRefInputType<$PrismaModel, "ToolCallStatus[]">;
 
 /**
  * Reference to a field of type 'AuditStatus'

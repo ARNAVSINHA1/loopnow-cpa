@@ -46,6 +46,12 @@ describe("workflow tools", () => {
 
     expect(result.status).toBe("FAILURE");
     expect(result.receiptStatus).toBeNull();
+    expect(result.agentRunStatus).toBeNull();
+    expect(result.currentStep).toBeNull();
+    expect(result.currentTool).toBeNull();
+    expect(result.iteration).toBeNull();
+    expect(result.latestTool).toBeNull();
+    expect(result.latestToolStatus).toBeNull();
     expect(result.pendingApproval).toBe(false);
   });
 });
