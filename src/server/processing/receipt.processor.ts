@@ -10,7 +10,7 @@ import { findGifiForCategory } from "@/server/domain/gifi/gifi-rules";
 import {
   getMealITCPercentage,
   type MealITCException,
-} from "@/server/domain/cra/meals-rules";
+} from "../domain/cra/meals-rules";
 
 const RULE_VERSION = "CRA-PROTOTYPE-v1";
 const MODEL = "cpa-copilot-v1";
@@ -30,6 +30,22 @@ function classifyExpense(input: {
   const text = `${input.vendor} ${input.description ?? ""}`.toLowerCase();
 
   if (
+    text.includes("meal") ||
+    text.includes("restaurant") ||
+    text.includes("dining") ||
+    text.includes("keg")
+  ) {
+    return {
+      category: "Meals and Entertainment",
+      gifiCode: "8523",
+      confidence: 0.9,
+      reason:
+        "Receipt vendor/description matches the prototype business-meal classification rules.",
+      mealException: "standard",
+    };
+  }
+
+  if (
     text.includes("staples") ||
     text.includes("office") ||
     text.includes("best buy")
@@ -40,22 +56,6 @@ function classifyExpense(input: {
       confidence: 0.9,
       reason:
         "Receipt vendor/description matches the prototype office-expense classification rules.",
-    };
-  }
-
-  if (
-    text.includes("meal") ||
-    text.includes("restaurant") ||
-    text.includes("keg") ||
-    text.includes("dining")
-  ) {
-    return {
-        category: "Meals and Entertainment",
-        gifiCode: null,
-        confidence: 0.9,
-        reason:
-        "Receipt vendor/description matches the prototype business-meal classification rules.",
-        mealException: "standard",
     };
   }
 
@@ -320,10 +320,24 @@ export async function processReceipt(receiptId: string) {
        * If the receipt explicitly contains a commercial-use percentage,
        * that value is used.
        */
-      const eligibilityPercentage =
-        receipt.commercialUsePercentage !== null
+      const commercialUsePercentage =
+        receipt.commercialUsePercentage !== null &&
+        receipt.commercialUsePercentage !== undefined
           ? Number(receipt.commercialUsePercentage) / 100
           : 1;
+
+      let eligibilityPercentage = commercialUsePercentage;
+
+      if (
+        classification.category === "Meals and Entertainment"
+      ) {
+        const mealPercentage = getMealITCPercentage(
+          classification.mealException ?? "standard",
+        );
+
+        eligibilityPercentage =
+          commercialUsePercentage * mealPercentage;
+      }
 
       /*
        * STEP 7: Deterministic ITC calculation
@@ -407,7 +421,7 @@ export async function processReceipt(receiptId: string) {
           receiptId: receipt.id,
           category: classification.category,
           gifiCode: gifi?.code ?? null,
-          commercialUsePercentage: eligibilityPercentage * 100,
+          commercialUsePercentage: commercialUsePercentage * 100,
           grossTax: Number(receipt.taxAmount),
           eligibilityPercentage,
           eligibleItc: itc.eligibleITC,
@@ -426,7 +440,7 @@ export async function processReceipt(receiptId: string) {
         update: {
           category: classification.category,
           gifiCode: gifi?.code ?? null,
-          commercialUsePercentage: eligibilityPercentage * 100,
+          commercialUsePercentage: commercialUsePercentage * 100,
           grossTax: Number(receipt.taxAmount),
           eligibilityPercentage,
           eligibleItc: itc.eligibleITC,

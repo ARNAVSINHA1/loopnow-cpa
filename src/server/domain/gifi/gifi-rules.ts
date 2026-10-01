@@ -16,7 +16,16 @@ const GIFI_CATALOGUE: GifiCandidate[] = [
     parentCategory: "Business Expenses",
     applicableExpenseTypes: ["office_supplies", "office_expenses"],
     confidence: 1,
-    source: "prototype_catalogue",
+    source: "assessment_prototype_catalogue",
+  },
+  {
+    code: "8523",
+    description: "Meals and entertainment",
+    category: "Meals and Entertainment",
+    parentCategory: "Business Expenses",
+    applicableExpenseTypes: ["business_meal", "meals_entertainment"],
+    confidence: 1,
+    source: "assessment_example",
   },
 ];
 
