@@ -1,10 +1,5 @@
 import { prisma } from "@/server/db";
 import { executeTool } from "@/server/tools/executor";
-import { evaluateDocumentation } from "@/server/domain/cra/documentation-rules";
-import { validateGstHstNumber } from "@/server/domain/cra/gst-hst-rules";
-import { calculateEligibleITC } from "@/server/domain/cra/itc-rules";
-import { findGifiForCategory } from "@/server/domain/gifi/gifi-rules";
-import { classifyExpense } from "@/server/domain/classification/classification-rules";
 import {
   getMealITCPercentage,
   type MealITCException,
@@ -201,69 +196,111 @@ export async function processReceipt(receiptId: string) {
       /*
        * STEP 3: CRA documentation evaluation
        */
-      const documentation = evaluateDocumentation({
-        total: Number(receipt.total),
-        gstHstNumber: receipt.gstHstNumber,
-      });
-
-      await tx.toolCall.create({
-        data: {
-          agentRunId: agentRun.id,
-          toolName: "documentation_rules",
-          input: {
-            receiptId: receipt.id,
-            total: receipt.total.toString(),
-            gstHstNumberPresent: Boolean(receipt.gstHstNumber),
-          },
-          output: documentation,
-          status: "SUCCESS",
-          completedAt: new Date(),
+      const documentationTool = await executeTool(
+        "validate_cra_documentation",
+        {
+          receiptId: receipt.id,
+          total: Number(receipt.total),
+          gstHstNumber: receipt.gstHstNumber,
         },
-      });
+        {
+          selectedReceiptId: receipt.id,
+          agentRunId: agentRun.id,
+          db: tx,
+        },
+      );
+
+      if (documentationTool.status === "FAILURE" || !documentationTool.output) {
+        throw new Error("CRA documentation validation tool failed.");
+      }
+
+      const documentation = documentationTool.output as {
+        tier: 1 | 2 | 3;
+        status: "sufficient" | "insufficient" | "review";
+        reason: string;
+        gstHstValidation: {
+          status: "missing" | "invalid_format" | "valid_format" | "unavailable";
+          normalizedNumber: string | null;
+          reason: string;
+          externallyVerified: false;
+        };
+      };
 
       /*
        * STEP 4: Expense classification
        */
-      const classification = classifyExpense({
-        vendor: receipt.vendor,
-        description: receipt.description,
-      });
-
-      await tx.toolCall.create({
-        data: {
-          agentRunId: agentRun.id,
-          toolName: "expense_classification",
-          input: {
-            receiptId: receipt.id,
-            vendor: receipt.vendor,
-            description: receipt.description,
-          },
-          output: classification,
-          status: "SUCCESS",
-          completedAt: new Date(),
+      const classificationTool = await executeTool(
+        "classify_expense",
+        {
+          receiptId: receipt.id,
+          vendor: receipt.vendor,
+          description: receipt.description,
         },
-      });
+        {
+          selectedReceiptId: receipt.id,
+          agentRunId: agentRun.id,
+          db: tx,
+        },
+      );
+
+      if (
+        classificationTool.status === "FAILURE" ||
+        !classificationTool.output
+      ) {
+        throw new Error("Expense classification tool failed.");
+      }
+
+      const classification = classificationTool.output as {
+        category: string;
+        gifiCode: string | null;
+        confidence: number;
+        reason: string;
+        mealException?:
+          "standard" | "charityOrPublicInstitution" | "longHaulTruckDriver";
+      };
 
       /*
        * STEP 5: GIFI mapping
        */
-      const gifi = classification.gifiCode
-        ? findGifiForCategory(classification.category)
-        : null;
-
-      await tx.toolCall.create({
-        data: {
-          agentRunId: agentRun.id,
-          toolName: "gifi_mapping",
-          input: {
-            category: classification.category,
-            proposedCode: classification.gifiCode,
-          },
-          output: gifi ?? undefined,
-          status: "SUCCESS",
-          completedAt: new Date(),
+      const gifiTool = await executeTool(
+        "assign_gifi_code",
+        {
+          receiptId: receipt.id,
+          category: classification.category,
+          proposedCode: classification.gifiCode,
         },
-      });
+        {
+          selectedReceiptId: receipt.id,
+          agentRunId: agentRun.id,
+          db: tx,
+        },
+      );
+
+      if (gifiTool.status === "FAILURE" || !gifiTool.output) {
+        throw new Error("GIFI assignment tool failed.");
+      }
+
+      const gifiResult = gifiTool.output as {
+        status: "SUCCESS" | "REVIEW_REQUIRED";
+        receiptId: string;
+        category: string;
+        gifiCode: string | null;
+        description?: string;
+        confidence?: number;
+        source?: string;
+        reason: string;
+      };
+
+      const gifi =
+        gifiResult.status === "SUCCESS" && gifiResult.gifiCode
+          ? {
+              code: gifiResult.gifiCode,
+              description: gifiResult.description ?? "",
+              category: gifiResult.category,
+              confidence: gifiResult.confidence ?? 0,
+              source: gifiResult.source ?? "",
+            }
+          : null;
 
       /*
        * STEP 6: Determine eligibility percentage
@@ -296,41 +333,54 @@ export async function processReceipt(receiptId: string) {
         classification.gifiCode === null ||
         gifi === null;
 
-      const itc = classificationRequiresReview
-        ? {
-            status: "review" as const,
-            receiptId: receipt.id,
-            grossTax: Number(receipt.taxAmount),
-            eligibilityPercentage,
-            eligibleITC: 0,
-            ruleApplied: "CLASSIFICATION_REVIEW",
-            documentation: {
-              status: documentation.status,
-            },
-            source: "CRA_RULE_ENGINE" as const,
-          }
-        : calculateEligibleITC({
+      let itc;
+
+      if (classificationRequiresReview) {
+        itc = {
+          status: "review" as const,
+          receiptId: receipt.id,
+          grossTax: Number(receipt.taxAmount),
+          eligibilityPercentage,
+          eligibleITC: 0,
+          ruleApplied: "CLASSIFICATION_REVIEW",
+          documentation: {
+            status: documentation.status,
+          },
+          source: "CRA_RULE_ENGINE" as const,
+        };
+      } else {
+        const itcTool = await executeTool(
+          "calculate_eligible_itc",
+          {
             receiptId: receipt.id,
             taxAmount: Number(receipt.taxAmount),
             eligibilityPercentage,
             documentationStatus: documentation.status,
-          });
-
-      await tx.toolCall.create({
-        data: {
-          agentRunId: agentRun.id,
-          toolName: "itc_calculation",
-          input: {
-            receiptId: receipt.id,
-            taxAmount: receipt.taxAmount.toString(),
-            eligibilityPercentage,
-            documentationStatus: documentation.status,
           },
-          output: itc,
-          status: "SUCCESS",
-          completedAt: new Date(),
-        },
-      });
+          {
+            selectedReceiptId: receipt.id,
+            agentRunId: agentRun.id,
+            db: tx,
+          },
+        );
+
+        if (itcTool.status === "FAILURE" || !itcTool.output) {
+          throw new Error("Eligible ITC calculation tool failed.");
+        }
+
+        itc = itcTool.output as {
+          status: "eligible" | "partial" | "ineligible" | "review";
+          receiptId: string;
+          grossTax: number;
+          eligibilityPercentage: number;
+          eligibleITC: number;
+          ruleApplied: string;
+          documentation: {
+            status: "sufficient" | "insufficient" | "review";
+          };
+          source: "CRA_RULE_ENGINE";
+        };
+      }
 
       /*
        * STEP 8: Self verification

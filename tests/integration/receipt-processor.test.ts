@@ -140,14 +140,14 @@ describe("Receipt processor integration", () => {
     const toolNames = toolCalls.map((toolCall) => toolCall.toolName);
 
     expect(toolNames).toContain("validate_gst_hst_number_format");
-    expect(toolNames).toContain("documentation_rules");
-    expect(toolNames).toContain("expense_classification");
-    expect(toolNames).toContain("gifi_mapping");
-    expect(toolNames).toContain("itc_calculation");
+    expect(toolNames).toContain("validate_cra_documentation");
+    expect(toolNames).toContain("classify_expense");
+    expect(toolNames).toContain("assign_gifi_code");
+    expect(toolNames).toContain("calculate_eligible_itc");
     expect(toolNames).toContain("self_verification");
 
     const itcToolCall = toolCalls.find(
-      (toolCall) => toolCall.toolName === "itc_calculation",
+      (toolCall) => toolCall.toolName === "calculate_eligible_itc",
     );
 
     expect(itcToolCall).toBeDefined();
