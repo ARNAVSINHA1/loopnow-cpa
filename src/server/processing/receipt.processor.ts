@@ -1,8 +1,10 @@
 import { prisma } from "@/server/db";
+import { executeTool } from "@/server/tools/executor";
 import { evaluateDocumentation } from "@/server/domain/cra/documentation-rules";
 import { validateGstHstNumber } from "@/server/domain/cra/gst-hst-rules";
 import { calculateEligibleITC } from "@/server/domain/cra/itc-rules";
 import { findGifiForCategory } from "@/server/domain/gifi/gifi-rules";
+import { classifyExpense } from "@/server/domain/classification/classification-rules";
 import {
   getMealITCPercentage,
   type MealITCException,
@@ -10,59 +12,6 @@ import {
 
 const RULE_VERSION = "CRA-PROTOTYPE-v1";
 const MODEL = "cpa-copilot-v1";
-
-type ClassificationResult = {
-  category: string;
-  gifiCode: string | null;
-  confidence: number;
-  reason: string;
-  mealException?: MealITCException;
-};
-
-function classifyExpense(input: {
-  vendor: string;
-  description?: string | null;
-}): ClassificationResult {
-  const text = `${input.vendor} ${input.description ?? ""}`.toLowerCase();
-
-  if (
-    text.includes("meal") ||
-    text.includes("restaurant") ||
-    text.includes("dining") ||
-    text.includes("keg")
-  ) {
-    return {
-      category: "Meals and Entertainment",
-      gifiCode: "8523",
-      confidence: 0.9,
-      reason:
-        "Receipt vendor/description matches the prototype business-meal classification rules.",
-      mealException: "standard",
-    };
-  }
-
-  if (
-    text.includes("staples") ||
-    text.includes("office") ||
-    text.includes("best buy")
-  ) {
-    return {
-      category: "Office Expenses",
-      gifiCode: "8810",
-      confidence: 0.9,
-      reason:
-        "Receipt vendor/description matches the prototype office-expense classification rules.",
-    };
-  }
-
-  return {
-    category: "Unknown",
-    gifiCode: null,
-    confidence: 0,
-    reason:
-      "No deterministic classification rule matched the available receipt information.",
-  };
-}
 
 function verifyResult(input: {
   taxAmount: number;
@@ -201,21 +150,23 @@ export async function processReceipt(receiptId: string) {
       /*
        * STEP 1: Validate receipt data
        */
-      await tx.toolCall.create({
-        data: {
+      const currentReceiptTool = await executeTool(
+        "get_current_receipt",
+        {},
+        {
+          selectedReceiptId: receipt.id,
           agentRunId: agentRun.id,
-          toolName: "receipt_validation",
-          input: {
-            receiptId: receipt.id,
-            vendor: receipt.vendor,
-            subtotal: receipt.subtotal.toString(),
-            taxAmount: receipt.taxAmount.toString(),
-            total: receipt.total.toString(),
-          },
-          status: "SUCCESS",
-          completedAt: new Date(),
+          db: tx,
         },
-      });
+      );
+
+      if (currentReceiptTool.status !== "SUCCESS") {
+        throw new Error(
+          `Failed to load selected receipt: ${JSON.stringify(
+            currentReceiptTool.output,
+          )}`,
+        );
+      }
 
       /*
        * STEP 2: GST/HST registration-number format validation
@@ -223,21 +174,29 @@ export async function processReceipt(receiptId: string) {
        * This is deterministic format validation only.
        * A valid format does NOT prove CRA registration.
        */
-      const gstHstValidation = validateGstHstNumber(receipt.gstHstNumber);
-
-      const gstValidationToolCall = await tx.toolCall.create({
-        data: {
-          agentRunId: agentRun.id,
-          toolName: "validate_gst_hst_number_format",
-          input: {
-            receiptId: receipt.id,
-            gstHstNumber: receipt.gstHstNumber,
-          },
-          output: gstHstValidation,
-          status: "SUCCESS",
-          completedAt: new Date(),
+      const gstValidationTool = await executeTool(
+        "validate_gst_hst_number_format",
+        {
+          receiptId: receipt.id,
+          gstHstNumber: receipt.gstHstNumber,
         },
-      });
+        {
+          selectedReceiptId: receipt.id,
+          agentRunId: agentRun.id,
+          db: tx,
+        },
+      );
+
+      if (gstValidationTool.status === "FAILURE" || !gstValidationTool.output) {
+        throw new Error("GST/HST validation tool failed.");
+      }
+
+      const gstHstValidation = gstValidationTool.output as {
+        status: "missing" | "invalid_format" | "valid_format" | "unavailable";
+        normalizedNumber: string | null;
+        reason: string;
+        externallyVerified: false;
+      };
 
       /*
        * STEP 3: CRA documentation evaluation
@@ -510,7 +469,7 @@ export async function processReceipt(receiptId: string) {
           model: MODEL,
           status: requiresReview ? "REVIEW_REQUIRED" : "SUCCESS",
           metadata: {
-            validationToolCallId: gstValidationToolCall.id,
+            validationToolCallId: gstValidationTool.toolCallId,
             gstHstValidationStatus: gstHstValidation.status,
             gstHstNumber: gstHstValidation.normalizedNumber,
             classification: classification.category,

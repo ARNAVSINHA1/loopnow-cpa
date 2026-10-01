@@ -1,0 +1,53 @@
+import { describe, expect, it } from "vitest";
+import {
+  CalculateEligibleItcInputSchema,
+  GetReceiptDetailsInputSchema,
+  ValidateGstHstNumberFormatInputSchema,
+} from "@/server/tools/contracts";
+
+describe("tool contracts", () => {
+  it("accepts valid receipt details input", () => {
+    const result = GetReceiptDetailsInputSchema.safeParse({
+      receiptId: "receipt-001",
+    });
+
+    expect(result.success).toBe(true);
+  });
+
+  it("rejects missing receipt id", () => {
+    const result = GetReceiptDetailsInputSchema.safeParse({});
+
+    expect(result.success).toBe(false);
+  });
+
+  it("accepts valid ITC calculation input", () => {
+    const result = CalculateEligibleItcInputSchema.safeParse({
+      receiptId: "receipt-001",
+      taxAmount: 12,
+      eligibilityPercentage: 0.5,
+      documentationStatus: "sufficient",
+    });
+
+    expect(result.success).toBe(true);
+  });
+
+  it("rejects an ITC percentage outside 0 to 1", () => {
+    const result = CalculateEligibleItcInputSchema.safeParse({
+      receiptId: "receipt-001",
+      taxAmount: 12,
+      eligibilityPercentage: 1.5,
+      documentationStatus: "sufficient",
+    });
+
+    expect(result.success).toBe(false);
+  });
+
+  it("accepts nullable GST/HST number", () => {
+    const result = ValidateGstHstNumberFormatInputSchema.safeParse({
+      receiptId: "receipt-001",
+      gstHstNumber: null,
+    });
+
+    expect(result.success).toBe(true);
+  });
+});
