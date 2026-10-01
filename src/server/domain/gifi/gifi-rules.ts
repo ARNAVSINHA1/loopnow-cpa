@@ -33,14 +33,11 @@ export function findGifiCode(code: string): GifiCandidate | null {
   return GIFI_CATALOGUE.find((item) => item.code === code) ?? null;
 }
 
-export function findGifiForCategory(
-  category: string,
-): GifiCandidate | null {
+export function findGifiForCategory(category: string): GifiCandidate | null {
   const normalized = category.trim().toLowerCase();
 
   return (
-    GIFI_CATALOGUE.find(
-      (item) => item.category.toLowerCase() === normalized,
-    ) ?? null
+    GIFI_CATALOGUE.find((item) => item.category.toLowerCase() === normalized) ??
+    null
   );
 }

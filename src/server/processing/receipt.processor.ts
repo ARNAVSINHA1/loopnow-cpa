@@ -1,10 +1,6 @@
 import { prisma } from "@/server/db";
-import {
-  evaluateDocumentation,
-} from "@/server/domain/cra/documentation-rules";
-import {
-  validateGstHstNumber,
-} from "@/server/domain/cra/gst-hst-rules";
+import { evaluateDocumentation } from "@/server/domain/cra/documentation-rules";
+import { validateGstHstNumber } from "@/server/domain/cra/gst-hst-rules";
 import { calculateEligibleITC } from "@/server/domain/cra/itc-rules";
 import { findGifiForCategory } from "@/server/domain/gifi/gifi-rules";
 import {
@@ -117,16 +113,13 @@ function verifyResult(input: {
 
   const expectedItc =
     Math.round(
-      (input.taxAmount * input.eligibilityPercentage +
-        Number.EPSILON) *
-        100,
+      (input.taxAmount * input.eligibilityPercentage + Number.EPSILON) * 100,
     ) / 100;
 
   if (Math.abs(expectedItc - input.eligibleItc) > 0.01) {
     return {
       valid: false,
-      reason:
-        "Eligible ITC failed deterministic arithmetic verification.",
+      reason: "Eligible ITC failed deterministic arithmetic verification.",
     };
   }
 
@@ -150,24 +143,24 @@ export async function processReceipt(receiptId: string) {
     }
 
     if (receipt.status === "REVIEW_REQUIRED") {
-    const existingApproval = await tx.approval.findFirst({
+      const existingApproval = await tx.approval.findFirst({
         where: {
-        receiptId: receipt.id,
-        status: "PENDING",
+          receiptId: receipt.id,
+          status: "PENDING",
         },
         orderBy: {
-        createdAt: "desc",
+          createdAt: "desc",
         },
-    });
+      });
 
-    if (existingApproval) {
+      if (existingApproval) {
         return {
-        receiptId: receipt.id,
-        status: "REVIEW_REQUIRED",
-        approvalId: existingApproval.id,
-        message: "Receipt is already awaiting human review.",
+          receiptId: receipt.id,
+          status: "REVIEW_REQUIRED",
+          approvalId: existingApproval.id,
+          message: "Receipt is already awaiting human review.",
         };
-    }
+      }
     }
 
     /*
@@ -208,7 +201,7 @@ export async function processReceipt(receiptId: string) {
       /*
        * STEP 1: Validate receipt data
        */
-      const validationToolCall = await tx.toolCall.create({
+      await tx.toolCall.create({
         data: {
           agentRunId: agentRun.id,
           toolName: "receipt_validation",
@@ -225,30 +218,30 @@ export async function processReceipt(receiptId: string) {
       });
 
       /*
-        * STEP 2: GST/HST registration-number format validation
-        *
-        * This is deterministic format validation only.
-        * A valid format does NOT prove CRA registration.
-      */
+       * STEP 2: GST/HST registration-number format validation
+       *
+       * This is deterministic format validation only.
+       * A valid format does NOT prove CRA registration.
+       */
       const gstHstValidation = validateGstHstNumber(receipt.gstHstNumber);
 
       const gstValidationToolCall = await tx.toolCall.create({
         data: {
-            agentRunId: agentRun.id,
-            toolName: "validate_gst_hst_number_format",
-            input: {
+          agentRunId: agentRun.id,
+          toolName: "validate_gst_hst_number_format",
+          input: {
             receiptId: receipt.id,
             gstHstNumber: receipt.gstHstNumber,
-            },
-            output: gstHstValidation,
-            status: "SUCCESS",
-            completedAt: new Date(),
+          },
+          output: gstHstValidation,
+          status: "SUCCESS",
+          completedAt: new Date(),
         },
       });
 
       /*
-        * STEP 3: CRA documentation evaluation
-      */
+       * STEP 3: CRA documentation evaluation
+       */
       const documentation = evaluateDocumentation({
         total: Number(receipt.total),
         gstHstNumber: receipt.gstHstNumber,
@@ -256,16 +249,16 @@ export async function processReceipt(receiptId: string) {
 
       await tx.toolCall.create({
         data: {
-            agentRunId: agentRun.id,
-            toolName: "documentation_rules",
-            input: {
+          agentRunId: agentRun.id,
+          toolName: "documentation_rules",
+          input: {
             receiptId: receipt.id,
             total: receipt.total.toString(),
             gstHstNumberPresent: Boolean(receipt.gstHstNumber),
-            },
-            output: documentation,
-            status: "SUCCESS",
-            completedAt: new Date(),
+          },
+          output: documentation,
+          status: "SUCCESS",
+          completedAt: new Date(),
         },
       });
 
@@ -328,26 +321,41 @@ export async function processReceipt(receiptId: string) {
 
       let eligibilityPercentage = commercialUsePercentage;
 
-      if (
-        classification.category === "Meals and Entertainment"
-      ) {
+      if (classification.category === "Meals and Entertainment") {
         const mealPercentage = getMealITCPercentage(
           classification.mealException ?? "standard",
         );
 
-        eligibilityPercentage =
-          commercialUsePercentage * mealPercentage;
+        eligibilityPercentage = commercialUsePercentage * mealPercentage;
       }
 
       /*
        * STEP 7: Deterministic ITC calculation
        */
-      const itc = calculateEligibleITC({
-        receiptId: receipt.id,
-        taxAmount: Number(receipt.taxAmount),
-        eligibilityPercentage,
-        documentationStatus: documentation.status,
-      });
+      const classificationRequiresReview =
+        classification.category === "Unknown" ||
+        classification.gifiCode === null ||
+        gifi === null;
+
+      const itc = classificationRequiresReview
+        ? {
+            status: "review" as const,
+            receiptId: receipt.id,
+            grossTax: Number(receipt.taxAmount),
+            eligibilityPercentage,
+            eligibleITC: 0,
+            ruleApplied: "CLASSIFICATION_REVIEW",
+            documentation: {
+              status: documentation.status,
+            },
+            source: "CRA_RULE_ENGINE" as const,
+          }
+        : calculateEligibleITC({
+            receiptId: receipt.id,
+            taxAmount: Number(receipt.taxAmount),
+            eligibilityPercentage,
+            documentationStatus: documentation.status,
+          });
 
       await tx.toolCall.create({
         data: {
@@ -560,7 +568,9 @@ export async function processReceipt(receiptId: string) {
           status: "FAILURE",
           metadata: {
             error:
-              error instanceof Error ? error.message : "Unknown processing error",
+              error instanceof Error
+                ? error.message
+                : "Unknown processing error",
           },
         },
       });

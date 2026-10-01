@@ -6,8 +6,7 @@ export const DocumentationStatusSchema = z.enum([
   "review",
 ]);
 
-export type DocumentationStatus =
-  z.infer<typeof DocumentationStatusSchema>;
+export type DocumentationStatus = z.infer<typeof DocumentationStatusSchema>;
 
 export const CalculateITCInputSchema = z.object({
   receiptId: z.string(),
@@ -16,9 +15,7 @@ export const CalculateITCInputSchema = z.object({
   documentationStatus: DocumentationStatusSchema,
 });
 
-export type CalculateITCInput = z.infer<
-  typeof CalculateITCInputSchema
->;
+export type CalculateITCInput = z.infer<typeof CalculateITCInputSchema>;
 
 export type ITCResult = {
   status: "eligible" | "partial" | "ineligible" | "review";
@@ -37,9 +34,7 @@ function money(value: number): number {
   return Math.round((value + Number.EPSILON) * 100) / 100;
 }
 
-export function calculateEligibleITC(
-  input: CalculateITCInput,
-): ITCResult {
+export function calculateEligibleITC(input: CalculateITCInput): ITCResult {
   const parsed = CalculateITCInputSchema.parse(input);
 
   if (parsed.documentationStatus !== "sufficient") {
@@ -57,9 +52,7 @@ export function calculateEligibleITC(
     };
   }
 
-  const eligibleITC = money(
-    parsed.taxAmount * parsed.eligibilityPercentage,
-  );
+  const eligibleITC = money(parsed.taxAmount * parsed.eligibilityPercentage);
 
   let status: ITCResult["status"];
 

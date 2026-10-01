@@ -26,15 +26,11 @@ describe("Meal ITC rules", () => {
   });
 
   it("calculates 100% eligibility for charity/public institution", () => {
-    expect(
-      applyMealITCLimitation(1, "charityOrPublicInstitution"),
-    ).toBe(1);
+    expect(applyMealITCLimitation(1, "charityOrPublicInstitution")).toBe(1);
   });
 
   it("calculates 80% eligibility for long-haul truck driver", () => {
-    expect(
-      applyMealITCLimitation(1, "longHaulTruckDriver"),
-    ).toBe(0.8);
+    expect(applyMealITCLimitation(1, "longHaulTruckDriver")).toBe(0.8);
   });
 
   it("clamps commercial use below zero", () => {

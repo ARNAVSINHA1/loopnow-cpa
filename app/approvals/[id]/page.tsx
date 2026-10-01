@@ -73,7 +73,9 @@ export default function ApprovalPage() {
         setItc(String(Number(data.proposedItc ?? 0)));
         setDecision(data.decision ?? "");
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Unable to load approval");
+        setError(
+          err instanceof Error ? err.message : "Unable to load approval",
+        );
       } finally {
         setLoading(false);
       }
@@ -120,7 +122,9 @@ export default function ApprovalPage() {
 
       router.push(`/receipts/${approval.receipt.id}`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Unable to process approval");
+      setError(
+        err instanceof Error ? err.message : "Unable to process approval",
+      );
     } finally {
       setSubmitting(false);
     }
@@ -171,9 +175,7 @@ export default function ApprovalPage() {
         <div className="mt-6">
           <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
             <div>
-              <p className="text-sm font-medium text-slate-500">
-                Human Review
-              </p>
+              <p className="text-sm font-medium text-slate-500">Human Review</p>
 
               <h1 className="text-3xl font-bold text-slate-900">
                 {receipt.vendor}
@@ -200,16 +202,12 @@ export default function ApprovalPage() {
             <div className="mt-5 space-y-4 text-sm">
               <div className="flex justify-between gap-4">
                 <span className="text-slate-500">Subtotal</span>
-                <span className="font-medium">
-                  {money(receipt.subtotal)}
-                </span>
+                <span className="font-medium">{money(receipt.subtotal)}</span>
               </div>
 
               <div className="flex justify-between gap-4">
                 <span className="text-slate-500">Tax</span>
-                <span className="font-medium">
-                  {money(receipt.taxAmount)}
-                </span>
+                <span className="font-medium">{money(receipt.taxAmount)}</span>
               </div>
 
               <div className="flex justify-between gap-4 border-t border-slate-100 pt-4">

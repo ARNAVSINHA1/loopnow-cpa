@@ -4,11 +4,7 @@ import { prisma } from "@/server/db";
 import { processApproval } from "@/server/approvals/approval.service";
 
 const approvalSchema = z.object({
-  action: z.enum([
-    "APPROVE",
-    "REJECT",
-    "EDIT",
-  ]),
+  action: z.enum(["APPROVE", "REJECT", "EDIT"]),
   reviewer: z.string().min(1),
   category: z.string().min(1).optional(),
   gifiCode: z.string().min(1).optional(),
@@ -22,10 +18,7 @@ type RouteContext = {
   }>;
 };
 
-export async function GET(
-  _request: Request,
-  context: RouteContext,
-) {
+export async function GET(_request: Request, context: RouteContext) {
   try {
     const { id } = await context.params;
 
@@ -65,10 +58,7 @@ export async function GET(
   }
 }
 
-export async function POST(
-  request: Request,
-  context: RouteContext,
-) {
+export async function POST(request: Request, context: RouteContext) {
   try {
     const { id } = await context.params;
 
@@ -85,8 +75,7 @@ export async function POST(
 
     const body = await request.json();
 
-    const parsed =
-      approvalSchema.safeParse(body);
+    const parsed = approvalSchema.safeParse(body);
 
     if (!parsed.success) {
       return NextResponse.json(
@@ -109,33 +98,17 @@ export async function POST(
       data: result,
     });
   } catch (error) {
-    console.error(
-      "Failed to process approval",
-      error,
-    );
+    console.error("Failed to process approval", error);
 
     const message =
-      error instanceof Error
-        ? error.message
-        : "Unable to process approval";
+      error instanceof Error ? error.message : "Unable to process approval";
 
-    if (
-      message === "Approval not found"
-    ) {
-      return NextResponse.json(
-        { error: message },
-        { status: 404 },
-      );
+    if (message === "Approval not found") {
+      return NextResponse.json({ error: message }, { status: 404 });
     }
 
-    if (
-      message ===
-      "Approval has already been decided"
-    ) {
-      return NextResponse.json(
-        { error: message },
-        { status: 409 },
-      );
+    if (message === "Approval has already been decided") {
+      return NextResponse.json({ error: message }, { status: 409 });
     }
 
     return NextResponse.json(

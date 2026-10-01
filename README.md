@@ -1,4 +1,3 @@
-
 # Loopnow CPA Copilot
 
 An AI-powered Canadian bookkeeping and GST/HST compliance copilot built for the Loopnow Technologies production engineering assessment.
@@ -134,7 +133,7 @@ loopnow-cpa/
 └── README.md
 ```
 
-The architecture is being expanded toward the assessment's recommended separation of UI, agent runtime, explicit tools, deterministic domain rules, persistence, auditability, and evaluation. 
+The architecture is being expanded toward the assessment's recommended separation of UI, agent runtime, explicit tools, deterministic domain rules, persistence, auditability, and evaluation.
 
 ---
 
@@ -171,11 +170,11 @@ src/server/domain/cra/
 
 The current documentation engine models three transaction tiers:
 
-| Tier | Transaction Total |
-|---|---:|
-| Tier 1 | `< $30` |
-| Tier 2 | `$30 to < $150` |
-| Tier 3 | `>= $150` |
+| Tier   | Transaction Total |
+| ------ | ----------------: |
+| Tier 1 |           `< $30` |
+| Tier 2 |   `$30 to < $150` |
+| Tier 3 |         `>= $150` |
 
 The implementation deliberately treats these as structured business rules rather than simply checking whether an amount is greater than $30.
 
@@ -250,9 +249,9 @@ The engine returns:
 {
   "status": "eligible",
   "receiptId": "receipt_001",
-  "grossTax": 4.10,
+  "grossTax": 4.1,
   "eligibilityPercentage": 1,
-  "eligibleITC": 4.10,
+  "eligibleITC": 4.1,
   "ruleApplied": "STANDARD_ITC",
   "documentation": {
     "status": "sufficient"

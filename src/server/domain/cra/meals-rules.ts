@@ -5,9 +5,7 @@ export const MealITCPolicy = {
 } as const;
 
 export type MealITCException =
-  | "standard"
-  | "charityOrPublicInstitution"
-  | "longHaulTruckDriver";
+  "standard" | "charityOrPublicInstitution" | "longHaulTruckDriver";
 
 export function getMealITCPercentage(
   exception: MealITCException = "standard",
@@ -19,10 +17,7 @@ export function applyMealITCLimitation(
   commercialUsePercentage: number,
   exception: MealITCException = "standard",
 ): number {
-  const commercialUse = Math.max(
-    0,
-    Math.min(1, commercialUsePercentage),
-  );
+  const commercialUse = Math.max(0, Math.min(1, commercialUsePercentage));
 
   return commercialUse * getMealITCPercentage(exception);
 }

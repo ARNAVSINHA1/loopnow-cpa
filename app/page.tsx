@@ -17,10 +17,7 @@ type Receipt = {
     eligibleItc: string | null;
     itcStatus: "ELIGIBLE" | "PARTIAL" | "INELIGIBLE" | "REVIEW" | null;
     classificationStatus:
-      | "PENDING"
-      | "CLASSIFIED"
-      | "REVIEW_REQUIRED"
-      | "REJECTED";
+      "PENDING" | "CLASSIFIED" | "REVIEW_REQUIRED" | "REJECTED";
   } | null;
 };
 
@@ -29,48 +26,71 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
+  async function fetchReceipts() {
+    const response = await fetch("/api/receipts", {
+      method: "GET",
+      cache: "no-store",
+    });
+
+    if (!response.ok) {
+      throw new Error(`Receipt API returned ${response.status}`);
+    }
+
+    const result = await response.json();
+
+    if (!Array.isArray(result.data)) {
+      throw new Error("Invalid receipt API response");
+    }
+
+    return result.data as Receipt[];
+  }
+
   async function loadReceipts() {
     try {
-        setLoading(true);
-        setError("");
+      setLoading(true);
+      setError("");
 
-        console.log("Fetching receipts...");
+      const data = await fetchReceipts();
 
-        const response = await fetch("/api/receipts", {
-        method: "GET",
-        cache: "no-store",
-        });
-
-        console.log("Receipt API status:", response.status);
-
-        if (!response.ok) {
-        throw new Error(`Receipt API returned ${response.status}`);
-        }
-
-        const result = await response.json();
-
-        console.log("Receipt API response:", result);
-
-        if (!Array.isArray(result.data)) {
-        throw new Error("Invalid receipt API response");
-        }
-
-        setReceipts(result.data);
+      setReceipts(data);
     } catch (err) {
-        console.error("Failed to load receipts:", err);
+      console.error("Failed to load receipts:", err);
 
-        setError(
-        err instanceof Error
-            ? err.message
-            : "Unable to load receipts",
-        );
+      setError(err instanceof Error ? err.message : "Unable to load receipts");
     } finally {
-        setLoading(false);
+      setLoading(false);
     }
   }
 
   useEffect(() => {
-    loadReceipts();
+    let cancelled = false;
+
+    async function loadInitialReceipts() {
+      try {
+        const data = await fetchReceipts();
+
+        if (!cancelled) {
+          setReceipts(data);
+        }
+      } catch (err) {
+        if (!cancelled) {
+          console.error("Failed to load receipts:", err);
+          setError(
+            err instanceof Error ? err.message : "Unable to load receipts",
+          );
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      }
+    }
+
+    loadInitialReceipts();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const stats = useMemo(
@@ -78,15 +98,12 @@ export default function DashboardPage() {
       total: receipts.length,
       pending: receipts.filter(
         (receipt) =>
-          receipt.status === "PENDING" ||
-          receipt.status === "PROCESSING",
+          receipt.status === "PENDING" || receipt.status === "PROCESSING",
       ).length,
-      review: receipts.filter(
-        (receipt) => receipt.status === "REVIEW_REQUIRED",
-      ).length,
-      completed: receipts.filter(
-        (receipt) => receipt.status === "COMPLETED",
-      ).length,
+      review: receipts.filter((receipt) => receipt.status === "REVIEW_REQUIRED")
+        .length,
+      completed: receipts.filter((receipt) => receipt.status === "COMPLETED")
+        .length,
     }),
     [receipts],
   );
@@ -96,9 +113,7 @@ export default function DashboardPage() {
       <div className="mx-auto max-w-7xl px-6 py-8">
         <header className="mb-8 flex items-center justify-between">
           <div>
-            <p className="text-sm font-medium text-blue-600">
-              LoopNow
-            </p>
+            <p className="text-sm font-medium text-blue-600">LoopNow</p>
 
             <h1 className="mt-1 text-3xl font-bold tracking-tight">
               CPA Copilot
@@ -164,9 +179,7 @@ export default function DashboardPage() {
                   <tr>
                     <th className="px-6 py-4 font-medium">Vendor</th>
                     <th className="px-6 py-4 font-medium">Amount</th>
-                    <th className="px-6 py-4 font-medium">
-                      Classification
-                    </th>
+                    <th className="px-6 py-4 font-medium">Classification</th>
                     <th className="px-6 py-4 font-medium">GIFI</th>
                     <th className="px-6 py-4 font-medium">ITC</th>
                     <th className="px-6 py-4 font-medium">Status</th>
@@ -181,9 +194,7 @@ export default function DashboardPage() {
                       className="transition hover:bg-slate-50"
                     >
                       <td className="px-6 py-5">
-                        <div className="font-medium">
-                          {receipt.vendor}
-                        </div>
+                        <div className="font-medium">{receipt.vendor}</div>
 
                         <div className="mt-1 text-xs text-slate-400">
                           {new Date(receipt.createdAt).toLocaleDateString()}
@@ -230,13 +241,7 @@ export default function DashboardPage() {
   );
 }
 
-function StatCard({
-  label,
-  value,
-}: {
-  label: string;
-  value: number;
-}) {
+function StatCard({ label, value }: { label: string; value: number }) {
   return (
     <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
       <p className="text-sm text-slate-500">{label}</p>
@@ -245,11 +250,7 @@ function StatCard({
   );
 }
 
-function StatusBadge({
-  status,
-}: {
-  status: Receipt["status"];
-}) {
+function StatusBadge({ status }: { status: Receipt["status"] }) {
   const styles: Record<Receipt["status"], string> = {
     PENDING: "bg-amber-50 text-amber-700",
     PROCESSING: "bg-blue-50 text-blue-700",

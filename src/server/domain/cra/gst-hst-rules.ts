@@ -37,10 +37,7 @@ export function validateGstHstNumber(
     };
   }
 
-  const normalized = value
-    .trim()
-    .toUpperCase()
-    .replace(/\s+/g, "");
+  const normalized = value.trim().toUpperCase().replace(/\s+/g, "");
 
   // Canadian GST/HST registration number:
   // 9 digits + RT + 4 digits.

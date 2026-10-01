@@ -1,8 +1,5 @@
 import { NextResponse } from "next/server";
-import {
-  listReceipts,
-  createReceipt,
-} from "@/server/receipts/receipt.service";
+import { listReceipts, createReceipt } from "@/server/receipts/receipt.service";
 import { createReceiptSchema } from "@/server/receipts/receipt.schema";
 
 export async function GET() {
@@ -13,15 +10,11 @@ export async function GET() {
   });
 }
 
-
-export async function POST(
-  request: Request,
-) {
+export async function POST(request: Request) {
   try {
     const body = await request.json();
 
-    const parsed =
-      createReceiptSchema.safeParse(body);
+    const parsed = createReceiptSchema.safeParse(body);
 
     if (!parsed.success) {
       return NextResponse.json(
@@ -35,8 +28,7 @@ export async function POST(
       );
     }
 
-    const receipt =
-      await createReceipt(parsed.data);
+    const receipt = await createReceipt(parsed.data);
 
     return NextResponse.json(
       {
@@ -46,12 +38,8 @@ export async function POST(
         status: 201,
       },
     );
-
   } catch (error) {
-    console.error(
-      "Failed to create receipt",
-      error,
-    );
+    console.error("Failed to create receipt", error);
 
     return NextResponse.json(
       {

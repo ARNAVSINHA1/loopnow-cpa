@@ -117,19 +117,13 @@ describe("Receipt processor integration", () => {
 
     expect(receipt?.expense).not.toBeNull();
 
-    expect(receipt?.expense?.category).toBe(
-      "Meals and Entertainment",
-    );
+    expect(receipt?.expense?.category).toBe("Meals and Entertainment");
 
     expect(receipt?.expense?.gifiCode).toBe("8523");
 
-    expect(
-      Number(receipt?.expense?.commercialUsePercentage),
-    ).toBe(100);
+    expect(Number(receipt?.expense?.commercialUsePercentage)).toBe(100);
 
-    expect(
-      Number(receipt?.expense?.eligibilityPercentage),
-    ).toBe(0.5);
+    expect(Number(receipt?.expense?.eligibilityPercentage)).toBe(0.5);
 
     expect(Number(receipt?.expense?.grossTax)).toBe(12);
 
@@ -137,20 +131,15 @@ describe("Receipt processor integration", () => {
 
     expect(receipt?.expense?.itcStatus).toBe("PARTIAL");
 
-    expect(receipt?.expense?.classificationStatus).toBe(
-      "CLASSIFIED",
-    );
+    expect(receipt?.expense?.classificationStatus).toBe("CLASSIFIED");
 
     expect(receipt?.approvals).toHaveLength(0);
 
-    const toolCalls =
-      receipt?.agentRuns.flatMap((run) => run.toolCalls) ?? [];
+    const toolCalls = receipt?.agentRuns.flatMap((run) => run.toolCalls) ?? [];
 
     const toolNames = toolCalls.map((toolCall) => toolCall.toolName);
 
-    expect(toolNames).toContain(
-      "validate_gst_hst_number_format",
-    );
+    expect(toolNames).toContain("validate_gst_hst_number_format");
     expect(toolNames).toContain("documentation_rules");
     expect(toolNames).toContain("expense_classification");
     expect(toolNames).toContain("gifi_mapping");
@@ -185,5 +174,124 @@ describe("Receipt processor integration", () => {
       gstHstValidationStatus: "valid_format",
       verificationPassed: true,
     });
+  });
+
+  it("sends an unresolved expense classification to human review", async () => {
+    const testReceiptId = "integration-unknown-gifi";
+
+    await prisma.receipt.deleteMany({
+      where: {
+        id: testReceiptId,
+      },
+    });
+
+    await prisma.receipt.create({
+      data: {
+        id: testReceiptId,
+        vendor: "Random Vendor Ltd",
+        description: "Specialized consulting service",
+        subtotal: 100,
+        taxAmount: 5,
+        total: 105,
+        taxType: "GST/HST",
+        gstHstNumber: "123456789RT0001",
+        commercialUsePercentage: 100,
+        category: "Unknown",
+        receiptAvailable: true,
+        status: "PENDING",
+      },
+    });
+
+    try {
+      const result = await processReceipt(testReceiptId);
+
+      expect(result.status).toBe("REVIEW_REQUIRED");
+      expect(result.classification).toBe("Unknown");
+      expect(result.gifiCode).toBeNull();
+      expect(result.itcStatus).toBe("review");
+      expect(result.eligibleItc).toBe(0);
+      expect(result.requiresReview).toBe(true);
+
+      const receipt = await prisma.receipt.findUnique({
+        where: {
+          id: testReceiptId,
+        },
+        include: {
+          expense: true,
+          approvals: true,
+          auditEvents: true,
+        },
+      });
+
+      expect(receipt).not.toBeNull();
+      expect(receipt?.status).toBe("REVIEW_REQUIRED");
+
+      expect(receipt?.expense).not.toBeNull();
+
+      expect(receipt?.expense?.category).toBe("Unknown");
+      expect(receipt?.expense?.gifiCode).toBeNull();
+      expect(Number(receipt?.expense?.eligibleItc)).toBe(0);
+      expect(receipt?.expense?.itcStatus).toBe("REVIEW");
+      expect(receipt?.expense?.classificationStatus).toBe("REVIEW_REQUIRED");
+
+      expect(receipt?.approvals).toHaveLength(1);
+      expect(receipt?.approvals[0]?.status).toBe("PENDING");
+
+      const completionAudit = receipt?.auditEvents.find(
+        (event) => event.action === "PROCESSING_COMPLETED",
+      );
+
+      expect(completionAudit).toBeDefined();
+      expect(completionAudit?.status).toBe("REVIEW_REQUIRED");
+    } finally {
+      const receipt = await prisma.receipt.findUnique({
+        where: {
+          id: testReceiptId,
+        },
+        include: {
+          agentRuns: true,
+        },
+      });
+
+      if (receipt) {
+        await prisma.toolCall.deleteMany({
+          where: {
+            agentRunId: {
+              in: receipt.agentRuns.map((run) => run.id),
+            },
+          },
+        });
+
+        await prisma.auditEvent.deleteMany({
+          where: {
+            receiptId: testReceiptId,
+          },
+        });
+
+        await prisma.approval.deleteMany({
+          where: {
+            receiptId: testReceiptId,
+          },
+        });
+
+        await prisma.expense.deleteMany({
+          where: {
+            receiptId: testReceiptId,
+          },
+        });
+
+        await prisma.agentRun.deleteMany({
+          where: {
+            receiptId: testReceiptId,
+          },
+        });
+
+        await prisma.receipt.delete({
+          where: {
+            id: testReceiptId,
+          },
+        });
+      }
+    }
   });
 });

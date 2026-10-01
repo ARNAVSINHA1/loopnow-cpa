@@ -1,9 +1,6 @@
 import { prisma } from "@/server/db";
 
-export type ApprovalAction =
-  | "APPROVE"
-  | "REJECT"
-  | "EDIT";
+export type ApprovalAction = "APPROVE" | "REJECT" | "EDIT";
 
 export type ApprovalDecisionInput = {
   approvalId: string;
@@ -15,9 +12,7 @@ export type ApprovalDecisionInput = {
   decision?: string;
 };
 
-export async function processApproval(
-  input: ApprovalDecisionInput,
-) {
+export async function processApproval(input: ApprovalDecisionInput) {
   return prisma.$transaction(async (tx) => {
     const approval = await tx.approval.findUnique({
       where: {
@@ -38,10 +33,7 @@ export async function processApproval(
 
     const now = new Date();
 
-    let status:
-      | "APPROVED"
-      | "REJECTED"
-      | "EDITED";
+    let status: "APPROVED" | "REJECTED" | "EDITED";
 
     if (input.action === "APPROVE") {
       status = "APPROVED";
@@ -51,34 +43,25 @@ export async function processApproval(
       status = "EDITED";
     }
 
-    const finalCategory =
-      input.category ??
-      approval.proposedCategory;
+    const finalCategory = input.category ?? approval.proposedCategory;
 
-    const finalGifiCode =
-      input.gifiCode ??
-      approval.proposedGifiCode;
+    const finalGifiCode = input.gifiCode ?? approval.proposedGifiCode;
 
     const finalItc =
       input.itc ??
-      (approval.proposedItc !== null
-        ? Number(approval.proposedItc)
-        : 0);
+      (approval.proposedItc !== null ? Number(approval.proposedItc) : 0);
 
-    const updatedApproval =
-      await tx.approval.update({
-        where: {
-          id: approval.id,
-        },
-        data: {
-          status,
-          reviewer: input.reviewer,
-          decision:
-            input.decision ??
-            input.action,
-          reviewedAt: now,
-        },
-      });
+    const updatedApproval = await tx.approval.update({
+      where: {
+        id: approval.id,
+      },
+      data: {
+        status,
+        reviewer: input.reviewer,
+        decision: input.decision ?? input.action,
+        reviewedAt: now,
+      },
+    });
 
     /*
      * REJECT:
@@ -108,10 +91,7 @@ export async function processApproval(
      * APPROVE / EDIT:
      * Persist the reviewer's accepted values.
      */
-    if (
-      status === "APPROVED" ||
-      status === "EDITED"
-    ) {
+    if (status === "APPROVED" || status === "EDITED") {
       const finalItcStatus =
         finalItc <= 0
           ? "INELIGIBLE"
@@ -158,9 +138,7 @@ export async function processApproval(
           category: finalCategory,
           gifiCode: finalGifiCode,
           eligibleItc: finalItc,
-          decision:
-            input.decision ??
-            input.action,
+          decision: input.decision ?? input.action,
         },
       },
     });

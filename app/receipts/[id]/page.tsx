@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams } from "next/navigation";
 
 type Approval = {
   id: string;
@@ -41,12 +41,7 @@ type Receipt = {
   commercialUsePercentage: string | null;
   category: string | null;
   receiptAvailable: boolean;
-  status:
-    | "PENDING"
-    | "PROCESSING"
-    | "REVIEW_REQUIRED"
-    | "COMPLETED"
-    | "ERROR";
+  status: "PENDING" | "PROCESSING" | "REVIEW_REQUIRED" | "COMPLETED" | "ERROR";
   createdAt: string;
   updatedAt: string;
 
@@ -59,10 +54,7 @@ type Receipt = {
     eligibleItc: string | null;
     itcStatus: "ELIGIBLE" | "PARTIAL" | "INELIGIBLE" | "REVIEW" | null;
     classificationStatus:
-      | "PENDING"
-      | "CLASSIFIED"
-      | "REVIEW_REQUIRED"
-      | "REJECTED";
+      "PENDING" | "CLASSIFIED" | "REVIEW_REQUIRED" | "REJECTED";
     confidence: string | null;
     reason: string | null;
   } | null;
@@ -73,7 +65,6 @@ type Receipt = {
 
 export default function ReceiptDetailsPage() {
   const params = useParams<{ id: string }>();
-  const router = useRouter();
 
   const [receipt, setReceipt] = useState<Receipt | null>(null);
   const [loading, setLoading] = useState(true);
@@ -100,20 +91,57 @@ export default function ReceiptDetailsPage() {
       }
 
       const result = await response.json();
+
       setReceipt(result.data);
     } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Unable to load receipt",
-      );
+      setError(err instanceof Error ? err.message : "Unable to load receipt");
     } finally {
       setLoading(false);
     }
   }
 
   useEffect(() => {
-    if (receiptId) {
-      loadReceipt();
+    let cancelled = false;
+
+    async function loadInitialReceipt() {
+      try {
+        const response = await fetch(`/api/receipts/${receiptId}`, {
+          cache: "no-store",
+        });
+
+        if (!response.ok) {
+          if (response.status === 404) {
+            throw new Error("Receipt not found");
+          }
+
+          throw new Error("Failed to load receipt");
+        }
+
+        const result = await response.json();
+
+        if (!cancelled) {
+          setReceipt(result.data);
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setError(
+            err instanceof Error ? err.message : "Unable to load receipt",
+          );
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      }
     }
+
+    if (receiptId) {
+      loadInitialReceipt();
+    }
+
+    return () => {
+      cancelled = true;
+    };
   }, [receiptId]);
 
   async function processReceipt() {
@@ -121,27 +149,20 @@ export default function ReceiptDetailsPage() {
       setProcessing(true);
       setError("");
 
-      const response = await fetch(
-        `/api/receipts/${receiptId}/process`,
-        {
-          method: "POST",
-        },
-      );
+      const response = await fetch(`/api/receipts/${receiptId}/process`, {
+        method: "POST",
+      });
 
       const result = await response.json();
 
       if (!response.ok) {
-        throw new Error(
-          result.error ?? "Unable to process receipt",
-        );
+        throw new Error(result.error ?? "Unable to process receipt");
       }
 
       await loadReceipt();
     } catch (err) {
       setError(
-        err instanceof Error
-          ? err.message
-          : "Unable to process receipt",
+        err instanceof Error ? err.message : "Unable to process receipt",
       );
     } finally {
       setProcessing(false);
@@ -162,10 +183,7 @@ export default function ReceiptDetailsPage() {
     return (
       <main className="min-h-screen bg-slate-50 px-6 py-10">
         <div className="mx-auto max-w-6xl">
-          <Link
-            href="/"
-            className="text-sm font-medium text-blue-600"
-          >
+          <Link href="/" className="text-sm font-medium text-blue-600">
             ← Back to dashboard
           </Link>
 
@@ -183,9 +201,7 @@ export default function ReceiptDetailsPage() {
 
   const pendingApproval =
     receipt.status === "REVIEW_REQUIRED"
-      ? receipt.approvals.find(
-          (approval) => approval.status === "PENDING",
-        )
+      ? receipt.approvals.find((approval) => approval.status === "PENDING")
       : undefined;
 
   return (
@@ -214,13 +230,10 @@ export default function ReceiptDetailsPage() {
                 Receipt Details
               </p>
 
-              <h1 className="mt-1 text-3xl font-bold">
-                {receipt.vendor}
-              </h1>
+              <h1 className="mt-1 text-3xl font-bold">{receipt.vendor}</h1>
 
               <p className="mt-2 text-sm text-slate-500">
-                Receipt ID:{" "}
-                <span className="font-mono">{receipt.id}</span>
+                Receipt ID: <span className="font-mono">{receipt.id}</span>
               </p>
             </div>
 
@@ -298,18 +311,16 @@ export default function ReceiptDetailsPage() {
                   label="Confidence"
                   value={
                     receipt.expense.confidence !== null
-                      ? `${(
-                          Number(receipt.expense.confidence) * 100
-                        ).toFixed(0)}%`
+                      ? `${(Number(receipt.expense.confidence) * 100).toFixed(
+                          0,
+                        )}%`
                       : "Not available"
                   }
                 />
 
                 <InfoRow
                   label="Classification status"
-                  value={formatStatus(
-                    receipt.expense.classificationStatus,
-                  )}
+                  value={formatStatus(receipt.expense.classificationStatus)}
                 />
 
                 <InfoRow
@@ -332,9 +343,7 @@ export default function ReceiptDetailsPage() {
               <>
                 <InfoRow
                   label="Gross tax"
-                  value={`$${Number(
-                    receipt.expense.grossTax ?? 0,
-                  ).toFixed(2)}`}
+                  value={`$${Number(receipt.expense.grossTax ?? 0).toFixed(2)}`}
                 />
 
                 <InfoRow
@@ -353,9 +362,7 @@ export default function ReceiptDetailsPage() {
                   value={
                     receipt.expense.eligibilityPercentage !== null
                       ? `${(
-                          Number(
-                            receipt.expense.eligibilityPercentage,
-                          ) * 100
+                          Number(receipt.expense.eligibilityPercentage) * 100
                         ).toFixed(0)}%`
                       : "Not calculated"
                   }
@@ -363,16 +370,14 @@ export default function ReceiptDetailsPage() {
 
                 <InfoRow
                   label="Eligible ITC"
-                  value={`$${Number(
-                    receipt.expense.eligibleItc ?? 0,
-                  ).toFixed(2)}`}
+                  value={`$${Number(receipt.expense.eligibleItc ?? 0).toFixed(
+                    2,
+                  )}`}
                 />
 
                 <InfoRow
                   label="ITC status"
-                  value={formatStatus(
-                    receipt.expense.itcStatus ?? "REVIEW",
-                  )}
+                  value={formatStatus(receipt.expense.itcStatus ?? "REVIEW")}
                 />
               </>
             ) : (
@@ -385,43 +390,34 @@ export default function ReceiptDetailsPage() {
           <Card title="Approval">
             {pendingApproval ? (
               <>
-                <InfoRow
-                  label="Status"
-                  value="Pending human review"
-                />
+                <InfoRow label="Status" value="Pending human review" />
 
                 <InfoRow
                   label="Proposed category"
-                  value={
-                    pendingApproval.proposedCategory ?? "Not provided"
-                  }
+                  value={pendingApproval.proposedCategory ?? "Not provided"}
                 />
 
                 <InfoRow
                   label="Proposed GIFI"
-                  value={
-                    pendingApproval.proposedGifiCode ?? "Not provided"
-                  }
+                  value={pendingApproval.proposedGifiCode ?? "Not provided"}
                 />
 
                 <InfoRow
                   label="Proposed ITC"
-                  value={`$${Number(
-                    pendingApproval.proposedItc ?? 0,
-                  ).toFixed(2)}`}
+                  value={`$${Number(pendingApproval.proposedItc ?? 0).toFixed(
+                    2,
+                  )}`}
                 />
 
                 <InfoRow
                   label="Reason"
-                  value={
-                    pendingApproval.reason ?? "No reason provided"
-                  }
+                  value={pendingApproval.reason ?? "No reason provided"}
                 />
 
                 <div className="mt-5 rounded-lg border border-orange-200 bg-orange-50 p-4">
                   <p className="text-sm font-medium text-orange-800">
-                    Human review is required before this receipt can
-                    be completed.
+                    Human review is required before this receipt can be
+                    completed.
                   </p>
 
                   <Link
@@ -434,10 +430,7 @@ export default function ReceiptDetailsPage() {
               </>
             ) : (
               <>
-                <InfoRow
-                  label="Status"
-                  value="No pending approval"
-                />
+                <InfoRow label="Status" value="No pending approval" />
 
                 {receipt.approvals.length === 0 ? (
                   <p className="mt-4 text-sm text-slate-500">
@@ -456,9 +449,7 @@ export default function ReceiptDetailsPage() {
                           </span>
 
                           <span className="text-xs text-slate-400">
-                            {new Date(
-                              approval.createdAt,
-                            ).toLocaleString()}
+                            {new Date(approval.createdAt).toLocaleString()}
                           </span>
                         </div>
 
@@ -493,15 +484,10 @@ export default function ReceiptDetailsPage() {
 
           <div className="divide-y divide-slate-100">
             {receipt.auditEvents.map((event) => (
-              <div
-                key={event.id}
-                className="px-6 py-5"
-              >
+              <div key={event.id} className="px-6 py-5">
                 <div className="flex flex-col justify-between gap-2 md:flex-row">
                   <div>
-                    <p className="font-medium">
-                      {formatStatus(event.action)}
-                    </p>
+                    <p className="font-medium">{formatStatus(event.action)}</p>
 
                     <p className="mt-1 text-sm text-slate-500">
                       Actor: {event.actor}
@@ -564,13 +550,7 @@ function Card({
   );
 }
 
-function InfoRow({
-  label,
-  value,
-}: {
-  label: string;
-  value: string;
-}) {
+function InfoRow({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex flex-col gap-1 border-b border-slate-100 py-3 last:border-0 sm:flex-row sm:items-start sm:justify-between sm:gap-6">
       <span className="text-sm text-slate-500">{label}</span>
@@ -582,11 +562,7 @@ function InfoRow({
   );
 }
 
-function StatusBadge({
-  status,
-}: {
-  status: Receipt["status"];
-}) {
+function StatusBadge({ status }: { status: Receipt["status"] }) {
   const styles: Record<Receipt["status"], string> = {
     PENDING: "bg-amber-50 text-amber-700",
     PROCESSING: "bg-blue-50 text-blue-700",

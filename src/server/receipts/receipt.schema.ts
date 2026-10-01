@@ -12,10 +12,7 @@ export const createReceiptSchema = z.object({
   taxType: z.string().optional(),
   gstHstNumber: z.string().optional(),
 
-  commercialUsePercentage: z.number()
-    .min(0)
-    .max(100)
-    .optional(),
+  commercialUsePercentage: z.number().min(0).max(100).optional(),
 
   category: z.string().optional(),
 });
